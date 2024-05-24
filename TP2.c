@@ -8,9 +8,9 @@
 
 int taille = 8;
 
-sem_t* plein;
-sem_t* vide;
-sem_t* mutex;
+sem_t plein;
+sem_t vide;
+sem_t mutex;
 
 char* bufferCommun;
 int tourProd;
@@ -19,20 +19,18 @@ int nbTour;
 char* chaineAEnvoyer;
 char* chaineRecue;
 
-
 void superMalloc (){
-    bufferCommun = (void*) malloc(taille+1);
-    int index = 0;
-    *bufferCommun = 0;
-    for (index = 1; index <= taille; index++)
+    bufferCommun = (char*) malloc(taille);
+    chaineRecue = (char*) malloc(taille + 1);
+    for (int i = 0; i < taille; i++)
     {
-        *(bufferCommun + index) = ' ';
+        bufferCommun[i] = ' ';
     }
 }
 
-
 void superFree(){
     free(bufferCommun);
+    free(chaineRecue);
 }
 
 unsigned int getCompteur(sem_t* sem){
@@ -41,128 +39,89 @@ unsigned int getCompteur(sem_t* sem){
     return val;
 }
 
-sem_t* creerSemaphore(unsigned int compteur){
-    sem_t* sem = (sem_t*) malloc(sizeof(sem_t));
-    if(sem_init(sem, 0, compteur) == 0){
-        printf("Creation de sem avec valeur initiale de %d \n", getCompteur(sem));
-    }
-    else{
-        perror("Echec de cretion de semaphore");
-    }
-    return sem;
-}
-
-int detruireSemaphore(sem_t *sem){
-    unsigned int res = sem_destroy(sem);
-    free(sem);
-    return res;
-}
-
-
 void P(sem_t* val){
-    return sem_wait(val);
+    sem_wait(val);
 }
 
 void V(sem_t* val){
-    return sem_post(val);
+    sem_post(val);
 }
 
-
-
 void placer(){
-    *(bufferCommun + taille - ((int) *bufferCommun)) = *(chaineAEnvoyer+tourProd);
-    *bufferCommun = (char) ((int) *bufferCommun + 1);
+    bufferCommun[tourProd % taille] = chaineAEnvoyer[tourProd];
 }
 
 void prendre(){
-    char lettre = *(bufferCommun + taille);
-    int i;
-    for (int i = taille; i > 1; i--){
-        *(bufferCommun + i) = *(bufferCommun + i - 1);
-    }
-    *bufferCommun = (char) ((int) *bufferCommun - 1);
-
-
-    *(chaineRecue+tourCons) = lettre;
+    chaineRecue[tourCons] = bufferCommun[tourCons % taille];
 }
 
-
-void producteur(){
+void* producteur(void* arg){
     while (tourProd < nbTour)
     {
-        printf("producteur while est executee\n");
-        P(vide);
-        P(mutex);
+        P(&vide);
+        P(&mutex);
 
         placer();
+        printf("Producteur a placé: %c\n", chaineAEnvoyer[tourProd]);
 
-        V(mutex);
-        V(plein);
+        V(&mutex);
+        V(&plein);
 
         tourProd++;
     }
     printf("fin prod\n");
-
+    return NULL;
 }
 
-void consomateur(){
+void* consomateur(void* arg){
     printf("debut cons\n");
     while (tourCons < nbTour)
     {
-        P(plein);
-        P(mutex);
+        P(&plein);
+        P(&mutex);
 
         prendre();
+        printf("Consommateur a pris: %c\n", chaineRecue[tourCons]);
 
-        V(mutex);
-        V(vide);
+        V(&mutex);
+        V(&vide);
 
         tourCons++;
     }
     printf("fin cons\n");
+    return NULL;
 }
 
 int main(int argc, char const *argv[])
 {
-    pthread_t thread_conso;
+    pthread_t thread_prod, thread_conso;
 
-    plein = creerSemaphore(0);
-    vide = creerSemaphore(taille);
-    mutex = creerSemaphore(1);
+    sem_init(&plein, 0, 0);
+    sem_init(&vide, 0, taille);
+    sem_init(&mutex, 0, 1);
 
     tourProd = 0;
     tourCons = 0;
 
-    int cumulLongueurs = 0;
-    int mot = 1;
-
     chaineAEnvoyer = "BoNjOuR";
+    nbTour = strlen(chaineAEnvoyer);
+
+    superMalloc();
 
     printf("\n Chaine a envoyer : %s \n", chaineAEnvoyer);
 
-    nbTour = strlen(chaineAEnvoyer);
+    pthread_create(&thread_conso, NULL, consomateur, NULL);
+    pthread_create(&thread_prod, NULL, producteur, NULL);
 
-    superMalloc(taille);
-
-    printf("AVANT\n");
-    if(pthread_create(&thread_conso, NULL, (void *(*)()) consomateur, NULL) == -1){
-        perror("Cant create thread");
-    }
-    printf("APRES\n");
-
-    producteur();
-
-    printf("after product\n");
-
+    pthread_join(thread_prod, NULL);
     pthread_join(thread_conso, NULL);
-    
-    printf("after join\n");
 
-    detruireSemaphore(plein);
-    detruireSemaphore(vide);
-    detruireSemaphore(mutex);
+    printf("Chaine recue: %s\n", chaineRecue);
+
+    sem_destroy(&plein);
+    sem_destroy(&vide);
+    sem_destroy(&mutex);
     superFree();
-
 
     return 0;
 }
