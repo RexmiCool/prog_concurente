@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-int taille = 8;
+int taille = 4;
 
 sem_t plein;
 sem_t vide;
@@ -69,12 +69,10 @@ void* producteur(void* arg){
 
         tourProd++;
     }
-    printf("fin prod\n");
     return NULL;
 }
 
 void* consomateur(void* arg){
-    printf("debut cons\n");
     while (tourCons < nbTour)
     {
         P(&plein);
@@ -88,7 +86,6 @@ void* consomateur(void* arg){
 
         tourCons++;
     }
-    printf("fin cons\n");
     return NULL;
 }
 
