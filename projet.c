@@ -42,7 +42,7 @@ void *client_thread(void *arg) {
     }
 
     addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, path);
+    strcpy(addr.sun_path, strstr(path, "1") ? SOCK_PATH2 : SOCK_PATH1);
 
     while (!stop) {
         if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
