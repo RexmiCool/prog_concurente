@@ -137,11 +137,14 @@ void *server_thread(void *arg) {
             } else if (recv_buffer2.size > 0) {
                 printf("[%s - Server] Received message: %s\n", process_id, recv_buffer2.buffer);
                 pthread_cond_signal(&cond2);
-                pthread_mutex_lock(&mutex1);
+                pthread_mutex_unlock(&mutex2);
+                
+                // Passage au thread brain pour le traitement
+                pthread_mutex_lock(&mutex2);
                 memcpy(send_buffer1.buffer, recv_buffer2.buffer, recv_buffer2.size);
                 send_buffer1.size = recv_buffer2.size;
                 pthread_cond_signal(&cond1);
-                pthread_mutex_unlock(&mutex1);
+                pthread_mutex_unlock(&mutex2);
             }
             pthread_mutex_unlock(&mutex2);
         } else {
@@ -152,11 +155,14 @@ void *server_thread(void *arg) {
             } else if (recv_buffer1.size > 0) {
                 printf("[%s - Server] Received message: %s\n", process_id, recv_buffer1.buffer);
                 pthread_cond_signal(&cond1);
-                pthread_mutex_lock(&mutex2);
+                pthread_mutex_unlock(&mutex1);
+                
+                // Passage au thread brain pour le traitement
+                pthread_mutex_lock(&mutex1);
                 memcpy(send_buffer2.buffer, recv_buffer1.buffer, recv_buffer1.size);
                 send_buffer2.size = recv_buffer1.size;
                 pthread_cond_signal(&cond2);
-                pthread_mutex_unlock(&mutex2);
+                pthread_mutex_unlock(&mutex1);
             }
             pthread_mutex_unlock(&mutex1);
         }
@@ -169,37 +175,83 @@ void *server_thread(void *arg) {
     return NULL;
 }
 
-void create_threads(pthread_t *client, pthread_t *server, char *path) {
+void *brain_thread(void *arg) {
+    Buffer *recv_buffer, *send_buffer;
+    pthread_mutex_t *mutex_recv, *mutex_send;
+    pthread_cond_t *cond_recv, *cond_send;
+    char *process_id = (char *)arg;
+
+    if (strstr(process_id, "1")) {
+        recv_buffer = &recv_buffer2;
+        send_buffer = &send_buffer1;
+        mutex_recv = &mutex2;
+        mutex_send = &mutex1;
+        cond_recv = &cond2;
+        cond_send = &cond1;
+    } else {
+        recv_buffer = &recv_buffer1;
+        send_buffer = &send_buffer2;
+        mutex_recv = &mutex1;
+        mutex_send = &mutex2;
+        cond_recv = &cond1;
+        cond_send = &cond2;
+    }
+
+    while (!stop) {
+        pthread_mutex_lock(mutex_recv);
+        while (recv_buffer->size == 0 && !stop) {
+            pthread_cond_wait(cond_recv, mutex_recv);
+        }
+
+        if (stop) {
+            pthread_mutex_unlock(mutex_recv);
+            break;
+        }
+
+        // Traitement du message reçu
+        strcat(recv_buffer->buffer, process_id);
+
+        // Passage au thread client pour l'envoi
+        pthread_mutex_lock(mutex_send);
+        memcpy(send_buffer->buffer, recv_buffer->buffer, recv_buffer->size);
+        send_buffer->size = recv_buffer->size;
+        pthread_cond_signal(cond_send);
+        pthread_mutex_unlock(mutex_send);
+
+        recv_buffer->size = 0;
+        pthread_mutex_unlock(mutex_recv);
+    }
+
+    return NULL;
+}
+
+void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, char *path, char *process_id) {
     pthread_create(client, NULL, client_thread, (void *)path);
     pthread_create(server, NULL, server_thread, (void *)path);
+    pthread_create(brain, NULL, brain_thread, (void *)process_id);
 }
 
 int main() {
     signal(SIGINT, handle_signal);
 
-    pthread_t client1, server1;
-    pthread_t client2, server2;
+    pthread_t client1, server1, brain1;
+    pthread_t client2, server2, brain2;
 
     pid_t pid1, pid2;
 
     if ((pid1 = fork()) == 0) {
-        create_threads(&client1, &server1, SOCK_PATH1);
-
-        pthread_mutex_lock(&mutex1);
-        strcpy(send_buffer1.buffer, "Bonjour");
-        send_buffer1.size = strlen("Bonjour") + 1;
-        pthread_cond_signal(&cond1);
-        pthread_mutex_unlock(&mutex1);
-
+        create_threads(&client1, &server1, &brain1, SOCK_PATH1, "1");
         pthread_join(client1, NULL);
         pthread_join(server1, NULL);
+        pthread_join(brain1, NULL);
         exit(0);
     }
 
     if ((pid2 = fork()) == 0) {
-        create_threads(&client2, &server2, SOCK_PATH2);
+        create_threads(&client2, &server2, &brain2, SOCK_PATH2, "2");
         pthread_join(client2, NULL);
         pthread_join(server2, NULL);
+        pthread_join(brain2, NULL);
         exit(0);
     }
 
@@ -212,11 +264,6 @@ int main() {
 
     wait(NULL);
     wait(NULL);
-
-    pthread_mutex_destroy(&mutex1);
-    pthread_mutex_destroy(&mutex2);
-    pthread_cond_destroy(&cond1);
-    pthread_cond_destroy(&cond2);
 
     return 0;
 }
