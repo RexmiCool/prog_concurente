@@ -249,3 +249,23 @@ int main() {
 
     return 0;
 }
+
+
+OUTPUT : 
+connect: Connection refused
+connect: No such file or directory
+[Process 1 - Client] Sending message: Bonjour
+[Process 2 - Server] Received message: Bonjour
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
+connect: Transport endpoint is already connected
