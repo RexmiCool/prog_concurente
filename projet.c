@@ -22,13 +22,20 @@ typedef struct {
     int size;
 } Buffer;
 
-Buffer recv_buffer = { .size = 0 };
-Buffer send_buffer = { .size = 0 };
+Buffer recv_buffer1 = { .size = 0 };
+Buffer send_buffer1 = { .size = 0 };
+Buffer recv_buffer2 = { .size = 0 };
+Buffer send_buffer2 = { .size = 0 };
 
-pthread_mutex_t recv_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t send_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t recv_cond = PTHREAD_COND_INITIALIZER;
-pthread_cond_t send_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t recv_mutex1 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t send_mutex1 = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t recv_cond1 = PTHREAD_COND_INITIALIZER;
+pthread_cond_t send_cond1 = PTHREAD_COND_INITIALIZER;
+
+pthread_mutex_t recv_mutex2 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t send_mutex2 = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t recv_cond2 = PTHREAD_COND_INITIALIZER;
+pthread_cond_t send_cond2 = PTHREAD_COND_INITIALIZER;
 
 void *client_thread(void *arg) {
     int sockfd;
@@ -51,23 +58,43 @@ void *client_thread(void *arg) {
             continue;
         }
 
-        pthread_mutex_lock(&send_mutex);
-        while (send_buffer.size == 0 && !stop) {
-            pthread_cond_wait(&send_cond, &send_mutex);
-        }
+        if (strstr(path, "1")) {
+            pthread_mutex_lock(&send_mutex1);
+            while (send_buffer1.size == 0 && !stop) {
+                pthread_cond_wait(&send_cond1, &send_mutex1);
+            }
 
-        if (stop) {
-            pthread_mutex_unlock(&send_mutex);
-            break;
-        }
+            if (stop) {
+                pthread_mutex_unlock(&send_mutex1);
+                break;
+            }
 
-        printf("[%s - Client] Sending message: %s\n", process_id, send_buffer.buffer);
-        if (send(sockfd, send_buffer.buffer, send_buffer.size, 0) == -1) {
-            perror("send");
-        }
+            printf("[%s - Client] Sending message: %s\n", process_id, send_buffer1.buffer);
+            if (send(sockfd, send_buffer1.buffer, send_buffer1.size, 0) == -1) {
+                perror("send");
+            }
 
-        send_buffer.size = 0;
-        pthread_mutex_unlock(&send_mutex);
+            send_buffer1.size = 0;
+            pthread_mutex_unlock(&send_mutex1);
+        } else {
+            pthread_mutex_lock(&send_mutex2);
+            while (send_buffer2.size == 0 && !stop) {
+                pthread_cond_wait(&send_cond2, &send_mutex2);
+            }
+
+            if (stop) {
+                pthread_mutex_unlock(&send_mutex2);
+                break;
+            }
+
+            printf("[%s - Client] Sending message: %s\n", process_id, send_buffer2.buffer);
+            if (send(sockfd, send_buffer2.buffer, send_buffer2.size, 0) == -1) {
+                perror("send");
+            }
+
+            send_buffer2.size = 0;
+            pthread_mutex_unlock(&send_mutex2);
+        }
     }
 
     close(sockfd);
@@ -105,15 +132,27 @@ void *server_thread(void *arg) {
     }
 
     while (!stop) {
-        pthread_mutex_lock(&recv_mutex);
-        recv_buffer.size = recv(clientfd, recv_buffer.buffer, BUFFER_SIZE, 0);
-        if (recv_buffer.size == -1) {
-            perror("recv");
-        } else if (recv_buffer.size > 0) {
-            printf("[%s - Server] Received message: %s\n", process_id, recv_buffer.buffer);
-            pthread_cond_signal(&recv_cond);
+        if (strstr(path, "1")) {
+            pthread_mutex_lock(&recv_mutex1);
+            recv_buffer1.size = recv(clientfd, recv_buffer1.buffer, BUFFER_SIZE, 0);
+            if (recv_buffer1.size == -1) {
+                perror("recv");
+            } else if (recv_buffer1.size > 0) {
+                printf("[%s - Server] Received message: %s\n", process_id, recv_buffer1.buffer);
+                pthread_cond_signal(&recv_cond1);
+            }
+            pthread_mutex_unlock(&recv_mutex1);
+        } else {
+            pthread_mutex_lock(&recv_mutex2);
+            recv_buffer2.size = recv(clientfd, recv_buffer2.buffer, BUFFER_SIZE, 0);
+            if (recv_buffer2.size == -1) {
+                perror("recv");
+            } else if (recv_buffer2.size > 0) {
+                printf("[%s - Server] Received message: %s\n", process_id, recv_buffer2.buffer);
+                pthread_cond_signal(&recv_cond2);
+            }
+            pthread_mutex_unlock(&recv_mutex2);
         }
-        pthread_mutex_unlock(&recv_mutex);
     }
 
     close(clientfd);
@@ -126,24 +165,45 @@ void *brain_thread(void *arg) {
     char *process_id = (char *)arg;
 
     while (!stop) {
-        pthread_mutex_lock(&recv_mutex);
-        while (recv_buffer.size == 0 && !stop) {
-            pthread_cond_wait(&recv_cond, &recv_mutex);
-        }
+        if (strcmp(process_id, "Process 1") == 0) {
+            pthread_mutex_lock(&recv_mutex1);
+            while (recv_buffer1.size == 0 && !stop) {
+                pthread_cond_wait(&recv_cond1, &recv_mutex1);
+            }
 
-        if (stop) {
-            pthread_mutex_unlock(&recv_mutex);
-            break;
-        }
+            if (stop) {
+                pthread_mutex_unlock(&recv_mutex1);
+                break;
+            }
 
-        pthread_mutex_lock(&send_mutex);
-        memcpy(send_buffer.buffer, recv_buffer.buffer, recv_buffer.size);
-        send_buffer.size = recv_buffer.size;
-        recv_buffer.size = 0;
-        printf("[%s - Brain] Processing message: %s\n", process_id, send_buffer.buffer);
-        pthread_cond_signal(&send_cond);
-        pthread_mutex_unlock(&send_mutex);
-        pthread_mutex_unlock(&recv_mutex);
+            pthread_mutex_lock(&send_mutex2);
+            memcpy(send_buffer2.buffer, recv_buffer1.buffer, recv_buffer1.size);
+            send_buffer2.size = recv_buffer1.size;
+            recv_buffer1.size = 0;
+            printf("[%s - Brain] Processing message: %s\n", process_id, send_buffer2.buffer);
+            pthread_cond_signal(&send_cond2);
+            pthread_mutex_unlock(&send_mutex2);
+            pthread_mutex_unlock(&recv_mutex1);
+        } else {
+            pthread_mutex_lock(&recv_mutex2);
+            while (recv_buffer2.size == 0 && !stop) {
+                pthread_cond_wait(&recv_cond2, &recv_mutex2);
+            }
+
+            if (stop) {
+                pthread_mutex_unlock(&recv_mutex2);
+                break;
+            }
+
+            pthread_mutex_lock(&send_mutex1);
+            memcpy(send_buffer1.buffer, recv_buffer2.buffer, recv_buffer2.size);
+            send_buffer1.size = recv_buffer2.size;
+            recv_buffer2.size = 0;
+            printf("[%s - Brain] Processing message: %s\n", process_id, send_buffer1.buffer);
+            pthread_cond_signal(&send_cond1);
+            pthread_mutex_unlock(&send_mutex1);
+            pthread_mutex_unlock(&recv_mutex2);
+        }
     }
 
     return NULL;
@@ -166,11 +226,11 @@ int main() {
     if ((pid1 = fork()) == 0) {
         create_threads(&client1, &server1, &brain1, SOCK_PATH1);
 
-        pthread_mutex_lock(&send_mutex);
-        strcpy(send_buffer.buffer, "Bonjour");
-        send_buffer.size = strlen("Bonjour") + 1;
-        pthread_cond_signal(&send_cond);
-        pthread_mutex_unlock(&send_mutex);
+        pthread_mutex_lock(&send_mutex1);
+        strcpy(send_buffer1.buffer, "Bonjour");
+        send_buffer1.size = strlen("Bonjour") + 1;
+        pthread_cond_signal(&send_cond1);
+        pthread_mutex_unlock(&send_mutex1);
 
         pthread_join(client1, NULL);
         pthread_join(server1, NULL);
@@ -196,10 +256,15 @@ int main() {
     wait(NULL);
     wait(NULL);
 
-    pthread_mutex_destroy(&recv_mutex);
-    pthread_mutex_destroy(&send_mutex);
-    pthread_cond_destroy(&recv_cond);
-    pthread_cond_destroy(&send_cond);
+    pthread_mutex_destroy(&recv_mutex1);
+    pthread_mutex_destroy(&send_mutex1);
+    pthread_cond_destroy(&recv_cond1);
+    pthread_cond_destroy(&send_cond1);
+
+    pthread_mutex_destroy(&recv_mutex2);
+    pthread_mutex_destroy(&send_mutex2);
+    pthread_cond_destroy(&recv_cond2);
+    pthread_cond_destroy(&send_cond2);
 
     return 0;
 }
