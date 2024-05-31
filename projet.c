@@ -38,17 +38,18 @@ void *client_thread(void *arg) {
     char *path = (char *)arg;
     char *process_id = strstr(path, "1") ? "Process 1" : "Process 2";
 
-    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        perror("socket");
-        exit(1);
-    }
-
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, strstr(path, "1") ? SOCK_PATH2 : SOCK_PATH1);
-
     while (!stop) {
+        if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+            perror("socket");
+            exit(1);
+        }
+
+        addr.sun_family = AF_UNIX;
+        strcpy(addr.sun_path, strstr(path, "1") ? SOCK_PATH2 : SOCK_PATH1);
+
         if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
             perror("connect");
+            close(sockfd);
             sleep(1);
             continue;
         }
@@ -90,9 +91,10 @@ void *client_thread(void *arg) {
             send_buffer2.size = 0;
             pthread_mutex_unlock(&mutex2);
         }
+
+        close(sockfd);
     }
 
-    close(sockfd);
     return NULL;
 }
 
@@ -121,12 +123,12 @@ void *server_thread(void *arg) {
         exit(1);
     }
 
-    if ((clientfd = accept(sockfd, NULL, NULL)) == -1) {
-        perror("accept");
-        exit(1);
-    }
-
     while (!stop) {
+        if ((clientfd = accept(sockfd, NULL, NULL)) == -1) {
+            perror("accept");
+            exit(1);
+        }
+
         if (strstr(path, "1")) {
             pthread_mutex_lock(&mutex2);
             recv_buffer2.size = recv(clientfd, recv_buffer2.buffer, BUFFER_SIZE, 0);
@@ -190,9 +192,10 @@ void *server_thread(void *arg) {
             send_buffer2.size = 0;
             pthread_mutex_unlock(&mutex2);
         }
+
+        close(clientfd);
     }
 
-    close(clientfd);
     close(sockfd);
     unlink(path);
     return NULL;
@@ -249,23 +252,3 @@ int main() {
 
     return 0;
 }
-
-
-OUTPUT : 
-connect: Connection refused
-connect: No such file or directory
-[Process 1 - Client] Sending message: Bonjour
-[Process 2 - Server] Received message: Bonjour
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
-connect: Transport endpoint is already connected
