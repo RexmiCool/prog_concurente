@@ -34,6 +34,7 @@ void *client_thread(void *arg) {
     int sockfd;
     struct sockaddr_un addr;
     char *path = (char *)arg;
+    char *process_id = strstr(path, "1") ? "Process 1" : "Process 2";
 
     if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");
@@ -60,7 +61,7 @@ void *client_thread(void *arg) {
             break;
         }
 
-        printf("Client thread sending message: %s\n", send_buffer.buffer);
+        printf("[%s - Client] Sending message: %s\n", process_id, send_buffer.buffer);
         if (send(sockfd, send_buffer.buffer, send_buffer.size, 0) == -1) {
             perror("send");
         }
@@ -77,6 +78,7 @@ void *server_thread(void *arg) {
     int sockfd, clientfd;
     struct sockaddr_un addr;
     char *path = (char *)arg;
+    char *process_id = strstr(path, "1") ? "Process 1" : "Process 2";
 
     if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");
@@ -108,7 +110,7 @@ void *server_thread(void *arg) {
         if (recv_buffer.size == -1) {
             perror("recv");
         } else if (recv_buffer.size > 0) {
-            printf("Server thread received message: %s\n", recv_buffer.buffer);
+            printf("[%s - Server] Received message: %s\n", process_id, recv_buffer.buffer);
             pthread_cond_signal(&recv_cond);
         }
         pthread_mutex_unlock(&recv_mutex);
@@ -121,7 +123,7 @@ void *server_thread(void *arg) {
 }
 
 void *brain_thread(void *arg) {
-    (void)arg; // Suppress unused parameter warning
+    char *process_id = (char *)arg;
 
     while (!stop) {
         pthread_mutex_lock(&recv_mutex);
@@ -138,7 +140,7 @@ void *brain_thread(void *arg) {
         memcpy(send_buffer.buffer, recv_buffer.buffer, recv_buffer.size);
         send_buffer.size = recv_buffer.size;
         recv_buffer.size = 0;
-        printf("Brain thread processing message: %s\n", send_buffer.buffer);
+        printf("[%s - Brain] Processing message: %s\n", process_id, send_buffer.buffer);
         pthread_cond_signal(&send_cond);
         pthread_mutex_unlock(&send_mutex);
         pthread_mutex_unlock(&recv_mutex);
@@ -147,18 +149,10 @@ void *brain_thread(void *arg) {
     return NULL;
 }
 
-void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, char *path, int is_first) {
-    if (is_first) {
-        pthread_mutex_lock(&send_mutex);
-        strcpy(send_buffer.buffer, "Bonjour");
-        send_buffer.size = strlen(send_buffer.buffer);
-        pthread_cond_signal(&send_cond);
-        pthread_mutex_unlock(&send_mutex);
-    }
-
+void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, char *path) {
     pthread_create(client, NULL, client_thread, (void *)path);
     pthread_create(server, NULL, server_thread, (void *)path);
-    pthread_create(brain, NULL, brain_thread, NULL);
+    pthread_create(brain, NULL, brain_thread, (void *)strstr(path, "1") ? "Process 1" : "Process 2");
 }
 
 int main() {
@@ -170,7 +164,14 @@ int main() {
     pid_t pid1, pid2;
 
     if ((pid1 = fork()) == 0) {
-        create_threads(&client1, &server1, &brain1, SOCK_PATH1, 1);
+        create_threads(&client1, &server1, &brain1, SOCK_PATH1);
+
+        pthread_mutex_lock(&send_mutex);
+        strcpy(send_buffer.buffer, "Bonjour");
+        send_buffer.size = strlen("Bonjour") + 1;
+        pthread_cond_signal(&send_cond);
+        pthread_mutex_unlock(&send_mutex);
+
         pthread_join(client1, NULL);
         pthread_join(server1, NULL);
         pthread_join(brain1, NULL);
@@ -178,7 +179,7 @@ int main() {
     }
 
     if ((pid2 = fork()) == 0) {
-        create_threads(&client2, &server2, &brain2, SOCK_PATH2, 0);
+        create_threads(&client2, &server2, &brain2, SOCK_PATH2);
         pthread_join(client2, NULL);
         pthread_join(server2, NULL);
         pthread_join(brain2, NULL);
