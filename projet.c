@@ -60,6 +60,7 @@ void *client_thread(void *arg) {
             break;
         }
 
+        printf("Client thread sending message: %s\n", send_buffer.buffer);
         if (send(sockfd, send_buffer.buffer, send_buffer.size, 0) == -1) {
             perror("send");
         }
@@ -107,6 +108,7 @@ void *server_thread(void *arg) {
         if (recv_buffer.size == -1) {
             perror("recv");
         } else if (recv_buffer.size > 0) {
+            printf("Server thread received message: %s\n", recv_buffer.buffer);
             pthread_cond_signal(&recv_cond);
         }
         pthread_mutex_unlock(&recv_mutex);
@@ -136,6 +138,7 @@ void *brain_thread(void *arg) {
         memcpy(send_buffer.buffer, recv_buffer.buffer, recv_buffer.size);
         send_buffer.size = recv_buffer.size;
         recv_buffer.size = 0;
+        printf("Brain thread processing message: %s\n", send_buffer.buffer);
         pthread_cond_signal(&send_cond);
         pthread_mutex_unlock(&send_mutex);
         pthread_mutex_unlock(&recv_mutex);
@@ -144,7 +147,15 @@ void *brain_thread(void *arg) {
     return NULL;
 }
 
-void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, char *path) {
+void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, char *path, int is_first) {
+    if (is_first) {
+        pthread_mutex_lock(&send_mutex);
+        strcpy(send_buffer.buffer, "Bonjour");
+        send_buffer.size = strlen(send_buffer.buffer);
+        pthread_cond_signal(&send_cond);
+        pthread_mutex_unlock(&send_mutex);
+    }
+
     pthread_create(client, NULL, client_thread, (void *)path);
     pthread_create(server, NULL, server_thread, (void *)path);
     pthread_create(brain, NULL, brain_thread, NULL);
@@ -159,7 +170,7 @@ int main() {
     pid_t pid1, pid2;
 
     if ((pid1 = fork()) == 0) {
-        create_threads(&client1, &server1, &brain1, SOCK_PATH1);
+        create_threads(&client1, &server1, &brain1, SOCK_PATH1, 1);
         pthread_join(client1, NULL);
         pthread_join(server1, NULL);
         pthread_join(brain1, NULL);
@@ -167,7 +178,7 @@ int main() {
     }
 
     if ((pid2 = fork()) == 0) {
-        create_threads(&client2, &server2, &brain2, SOCK_PATH2);
+        create_threads(&client2, &server2, &brain2, SOCK_PATH2, 0);
         pthread_join(client2, NULL);
         pthread_join(server2, NULL);
         pthread_join(brain2, NULL);
