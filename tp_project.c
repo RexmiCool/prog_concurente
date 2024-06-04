@@ -24,6 +24,12 @@ void* thread_brain(void* arg) {
   return NULL;
 }
 
+void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain) {
+    pthread_create(client, NULL, thread_client, NULL);
+    pthread_create(server, NULL, thread_server, NULL);
+    pthread_create(brain, NULL, thread_brain, NULL);
+}
+
 int main() {
   pid_t pid1, pid2;
 
@@ -33,9 +39,7 @@ int main() {
     // Code exécuté dans le processus fils 1
     pthread_t tid_client, tid_server, tid_brain;
 
-    pthread_create(&tid_client, NULL, thread_client, NULL);
-    pthread_create(&tid_server, NULL, thread_server, NULL);
-    pthread_create(&tid_brain, NULL, thread_brain, NULL);
+    create_threads(&tid_client, &tid_server, &tid_brain);
 
     pthread_join(tid_client, NULL);
     pthread_join(tid_server, NULL);
@@ -54,9 +58,7 @@ int main() {
     // Code exécuté dans le processus fils 2
     pthread_t tid_client, tid_server, tid_brain;
 
-    pthread_create(&tid_client, NULL, thread_client, NULL);
-    pthread_create(&tid_server, NULL, thread_server, NULL);
-    pthread_create(&tid_brain, NULL, thread_brain, NULL);
+    create_threads(&tid_client, &tid_server, &tid_brain);
 
     pthread_join(tid_client, NULL);
     pthread_join(tid_server, NULL);
