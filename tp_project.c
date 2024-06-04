@@ -11,11 +11,10 @@ typedef struct {
   pid_t pid;
 } message_t;
 
-// Mutex et variables de condition pour la synchronisation
-pthread_mutex_t mutex_server_brain = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond_server_brain = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t mutex_brain_client = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond_brain_client = PTHREAD_COND_INITIALIZER;
+// Sémaphores
+sem_t sem_plein;
+sem_t sem_mutex;
+sem_t sem_vide;
 
 // Tampon (file FIFO)
 message_t buffer[BUFFER_SIZE];
@@ -24,11 +23,8 @@ int in = 0, out = 0;
 void* thread_client(void* arg) {
   printf("Je suis le thread Client du processus %d\n", getpid());
   while (1) {
+    sem_wait(&sem_plein); // Attendre qu'un message soit disponible
     pthread_mutex_lock(&mutex_brain_client);
-    // Attendre qu'un message soit disponible
-    while (in == out) {
-      pthread_cond_wait(&cond_brain_client, &mutex_brain_client);
-    }
 
     // Récupérer le message du tampon
     message_t msg = buffer[out];
@@ -37,6 +33,7 @@ void* thread_client(void* arg) {
     printf("Client (%d) reçoit: %s (from Brain - PID: %d)\n", getpid(), msg.message, msg.pid);
 
     pthread_mutex_unlock(&mutex_brain_client);
+    sem_post(&sem_vide); // Signaler que le tampon est libre
     sleep(1); // Simuler le traitement du message
   }
   return NULL;
@@ -49,20 +46,16 @@ void* thread_server(void* arg) {
     printf("Entrez un message pour Brain: ");
     fgets(message, sizeof(message), stdin);
 
+    sem_wait(&sem_vide); // Attendre qu'il y ait de la place dans le tampon
     pthread_mutex_lock(&mutex_server_brain);
-    // Attendre s'il y a de la place dans le tampon
-    while ((in + 1) % BUFFER_SIZE == out) {
-      printf("Buffer plein, attente\n");
-      pthread_cond_wait(&cond_server_brain, &mutex_server_brain);
-    }
 
     // Placer le message dans le tampon
     strcpy(buffer[in].message, message);
     buffer[in].pid = getpid();
     in = (in + 1) % BUFFER_SIZE;
 
-    pthread_cond_signal(&cond_brain_client); // Signaler au Brain qu'il y a un message
     pthread_mutex_unlock(&mutex_server_brain);
+    sem_post(&sem_plein); // Signaler qu'un message est disponible
     sleep(2); // Simuler le travail du Server
   }
   return NULL;
@@ -71,11 +64,8 @@ void* thread_server(void* arg) {
 void* thread_brain(void* arg) {
   printf("Je suis le thread Brain du processus %d\n", getpid());
   while (1) {
+    sem_wait(&sem_plein); // Attendre qu'un message soit disponible
     pthread_mutex_lock(&mutex_server_brain);
-    // Attendre qu'un message soit disponible
-    while (in == out) {
-      pthread_cond_wait(&cond_server_brain, &mutex_server_brain);
-    }
 
     // Récupérer le message du tampon
     message_t msg = buffer[out];
@@ -86,20 +76,16 @@ void* thread_brain(void* arg) {
 
     pthread_mutex_unlock(&mutex_server_brain);
 
+    sem_wait(&sem_vide); // Attendre qu'il y ait de la place dans le tampon
     pthread_mutex_lock(&mutex_brain_client);
-    // Attendre s'il y a de la place dans le tampon
-    while ((in + 1) % BUFFER_SIZE == out) {
-      printf("Buffer plein, attente\n");
-      pthread_cond_wait(&cond_brain_client, &mutex_brain_client);
-    }
 
     // Placer le message modifié dans le tampon
     strcpy(buffer[in].message, msg.message);
     buffer[in].pid = msg.pid;
     in = (in + 1) % BUFFER_SIZE;
 
-    pthread_cond_signal(&cond_client); // Signaler au Client qu'il y a un message
     pthread_mutex_unlock(&mutex_brain_client);
+    sem_post(&sem_plein); // Signaler qu'un message est disponible
     sleep(2); // Simuler le travail du Brain
   }
   return NULL;
