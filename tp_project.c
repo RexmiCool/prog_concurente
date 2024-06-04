@@ -100,6 +100,11 @@ void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain) {
 int main() {
   pid_t pid1, pid2;
 
+  // Initialisation des sémaphores
+  sem_init(&sem_plein, 0, BUFFER_SIZE - 1);
+  sem_init(&sem_mutex, 0, 1);
+  sem_init(&sem_vide, 0, 0);
+
   // Création du processus fils 1 (process1)
   pid1 = fork();
   if (pid1 == 0) {
@@ -141,6 +146,11 @@ int main() {
   // Attente de la terminaison des processus fils
   waitpid(pid1, NULL, 0);
   waitpid(pid2, NULL, 0);
+
+  // Détruire les sémaphores
+  sem_destroy(&sem_plein);
+  sem_destroy(&sem_mutex);
+  sem_destroy(&sem_vide);
 
   printf("Fin du programme principal\n");
   return 0;
