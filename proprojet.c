@@ -14,6 +14,44 @@ typedef struct {
   int process_id;
 } thread_args;
 
+void *client_thread_function(void *arg) {
+  char *modified_buffer = (char *)arg;
+  int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (sockfd < 0) {
+    perror("socket");
+    exit(1);
+  }
+
+  struct sockaddr_in server_addr;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(PORT);
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+
+  if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    perror("connect");
+    exit(1);
+  }
+
+  printf("Thread client: Envoi du message modifié: %s\n", modified_buffer);
+  send(sockfd, modified_buffer, strlen(modified_buffer), 0);
+
+  close(sockfd);
+
+  pthread_exit(NULL);
+}
+
+void *brain_thread_function(void *arg) {
+  char *modified_buffer = (char *)arg;
+  printf("Thread brain: Message modifié: %s\n", modified_buffer);
+
+  // Envoyer le message modifié au thread client
+  pthread_t client_thread;
+  pthread_create(&client_thread, NULL, client_thread_function, (void *)modified_buffer);
+  pthread_join(client_thread, NULL);
+
+  pthread_exit(NULL);
+}
+
 void *server_thread(void *arg) {
   thread_args *args = (thread_args *)arg;
   int sockfd = args->sockfd;
@@ -37,44 +75,6 @@ void *server_thread(void *arg) {
     pthread_create(&brain_thread, NULL, brain_thread_function, (void *)modified_buffer);
     pthread_join(brain_thread, NULL);
   }
-
-  pthread_exit(NULL);
-}
-
-void *brain_thread_function(void *arg) {
-  char *modified_buffer = (char *)arg;
-  printf("Thread brain: Message modifié: %s\n", modified_buffer);
-
-  // Envoyer le message modifié au thread client
-  pthread_t client_thread;
-  pthread_create(&client_thread, NULL, client_thread_function, (void *)modified_buffer);
-  pthread_join(client_thread, NULL);
-
-  pthread_exit(NULL);
-}
-
-void *client_thread_function(void *arg) {
-  char *modified_buffer = (char *)arg;
-  int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (sockfd < 0) {
-    perror("socket");
-    exit(1);
-  }
-
-  struct sockaddr_in server_addr;
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_port = htons(PORT);
-  server_addr.sin_addr.s_addr = INADDR_ANY;
-
-  if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-    perror("connect");
-    exit(1);
-  }
-
-  printf("Thread client: Envoi du message modifié: %s\n", modified_buffer);
-  send(sockfd, modified_buffer, strlen(modified_buffer), 0);
-
-  close(sockfd);
 
   pthread_exit(NULL);
 }
