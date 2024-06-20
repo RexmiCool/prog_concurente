@@ -37,7 +37,6 @@ pthread_cond_t cond12 = PTHREAD_COND_INITIALIZER;
 pthread_cond_t cond21 = PTHREAD_COND_INITIALIZER;
 pthread_cond_t cond22 = PTHREAD_COND_INITIALIZER;
 
-
 void *brain_thread(void *arg) {
     char *path = (char *)arg;
     char *process_id = strstr(path, "1") ? "1" : "2";
@@ -64,8 +63,8 @@ void *brain_thread(void *arg) {
             memcpy(send_buffer1.buffer, recv_buffer1.buffer, recv_buffer1.size);
             send_buffer1.size = recv_buffer1.size;
             recv_buffer1.size = 0;
-                pthread_mutex_unlock(&mutex1recv);
-                pthread_mutex_unlock(&mutex1send);
+            pthread_mutex_unlock(&mutex1recv);
+            pthread_mutex_unlock(&mutex1send);
             pthread_cond_signal(&cond12);
             printf("[%s - Brain] stop brain\n", process_id);
         } else {
@@ -89,8 +88,8 @@ void *brain_thread(void *arg) {
             memcpy(send_buffer2.buffer, recv_buffer2.buffer, recv_buffer2.size);
             send_buffer2.size = recv_buffer2.size;
             recv_buffer2.size = 0;
-                pthread_mutex_unlock(&mutex2recv);
-                pthread_mutex_unlock(&mutex2send);
+            pthread_mutex_unlock(&mutex2recv);
+            pthread_mutex_unlock(&mutex2send);
             pthread_cond_signal(&cond22);
             printf("[%s - Brain] stop brain\n", process_id);
         }
@@ -226,7 +225,6 @@ void *server_thread(void *arg) {
     return NULL;
 }
 
-
 void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, char *path) {
     pthread_create(client, NULL, client_thread, (void *)path);
     pthread_create(server, NULL, server_thread, (void *)path);
@@ -248,7 +246,7 @@ int main() {
         strcpy(send_buffer1.buffer, "Bonjour");
         send_buffer1.size = strlen("Bonjour") + 1;
         pthread_mutex_unlock(&mutex1send);
-        pthread_cond_signal(&cond21);
+        pthread_cond_signal(&cond12);
 
         pthread_join(client1, NULL);
         pthread_join(server1, NULL);
@@ -280,7 +278,7 @@ int main() {
     pthread_mutex_destroy(&mutex2send);
     pthread_cond_destroy(&cond11);
     pthread_cond_destroy(&cond12);
-    pthread_cond_destroy(&cond11);
+    pthread_cond_destroy(&cond21);
     pthread_cond_destroy(&cond22);
 
     return 0;
