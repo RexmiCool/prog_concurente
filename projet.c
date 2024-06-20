@@ -46,6 +46,7 @@ void *brain_thread(void *arg) {
             printf("[%s - Brain] start brain\n", process_id);
             pthread_mutex_lock(&mutex1recv);
             while (recv_buffer1.size == 0 && !stop) {
+                printf("[%s - Brain] waiting for message\n", process_id);
                 pthread_cond_wait(&cond11, &mutex1recv);
             }
 
@@ -56,6 +57,7 @@ void *brain_thread(void *arg) {
 
             strcat(recv_buffer1.buffer, process_id);
             recv_buffer1.size = strlen(recv_buffer1.buffer) + 1;
+            printf("[%s - Brain] processing message: %s\n", process_id, recv_buffer1.buffer);
 
             pthread_mutex_lock(&mutex1send);
             memcpy(send_buffer1.buffer, recv_buffer1.buffer, recv_buffer1.size);
@@ -64,11 +66,12 @@ void *brain_thread(void *arg) {
             pthread_mutex_unlock(&mutex1recv);
             pthread_mutex_unlock(&mutex1send);
             pthread_cond_signal(&cond12);
-            printf("[%s - Brain] stop brain\n", process_id);
+            printf("[%s - Brain] message processed\n", process_id);
         } else {
             printf("[%s - Brain] start brain\n", process_id);
             pthread_mutex_lock(&mutex2recv);
             while (recv_buffer2.size == 0 && !stop) {
+                printf("[%s - Brain] waiting for message\n", process_id);
                 pthread_cond_wait(&cond21, &mutex2recv);
             }
 
@@ -79,6 +82,7 @@ void *brain_thread(void *arg) {
 
             strcat(recv_buffer2.buffer, process_id);
             recv_buffer2.size = strlen(recv_buffer2.buffer) + 1;
+            printf("[%s - Brain] processing message: %s\n", process_id, recv_buffer2.buffer);
 
             pthread_mutex_lock(&mutex2send);
             memcpy(send_buffer2.buffer, recv_buffer2.buffer, recv_buffer2.size);
@@ -87,7 +91,7 @@ void *brain_thread(void *arg) {
             pthread_mutex_unlock(&mutex2recv);
             pthread_mutex_unlock(&mutex2send);
             pthread_cond_signal(&cond22);
-            printf("[%s - Brain] stop brain\n", process_id);
+            printf("[%s - Brain] message processed\n", process_id);
         }
     }
 
@@ -119,6 +123,7 @@ void *client_thread(void *arg) {
         if (strstr(path, "1")) {
             pthread_mutex_lock(&mutex1send);
             while (send_buffer1.size == 0 && !stop) {
+                printf("[%s - Client] waiting to send message\n", process_id);
                 pthread_cond_wait(&cond12, &mutex1send);
             }
 
@@ -138,6 +143,7 @@ void *client_thread(void *arg) {
         } else {
             pthread_mutex_lock(&mutex2send);
             while (send_buffer2.size == 0 && !stop) {
+                printf("[%s - Client] waiting to send message\n", process_id);
                 pthread_cond_wait(&cond22, &mutex2send);
             }
 
