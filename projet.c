@@ -1,20 +1,3 @@
-[2 - Brain] start brain
-[2 - Brain] waiting for message
-connect: Connection refused
-[1 - Brain] start brain
-[1 - Brain] waiting for message
-[Process 2 - Client] waiting to send message
-[Process 1 - Client] Sending message: Bonjour
-[Process 1 - Client] waiting to send message
-[Process 2 - Server] Received message: Bonjour
-[2 - Brain] processing message: Bonjour2
-[2 - Brain] message processed
-[2 - Brain] start brain
-[2 - Brain] waiting for message
-[Process 2 - Client] Sending message: Bonjour2
-[Process 2 - Client] waiting to send message
-[Process 1 - Server] Received message: Bonjour2
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -157,6 +140,7 @@ void *client_thread(void *arg) {
             send_buffer1.size = 0;
             pthread_mutex_unlock(&mutex1send);
             pthread_cond_signal(&cond21); // Notifier brain 2
+            printf("[%s - Client] Message sent and brain 2 notified\n", process_id);
         } else {
             pthread_mutex_lock(&mutex2send);
             while (send_buffer2.size == 0 && !stop) {
@@ -177,6 +161,7 @@ void *client_thread(void *arg) {
             send_buffer2.size = 0;
             pthread_mutex_unlock(&mutex2send);
             pthread_cond_signal(&cond11); // Notifier brain 1
+            printf("[%s - Client] Message sent and brain 1 notified\n", process_id);
         }
 
         close(sockfd);
@@ -224,6 +209,7 @@ void *server_thread(void *arg) {
             } else if (recv_buffer1.size > 0) {
                 printf("[%s - Server] Received message: %s\n", process_id, recv_buffer1.buffer);
                 pthread_cond_signal(&cond11);
+                printf("[%s - Server] brain 1 notified\n", process_id);
             }
             pthread_mutex_unlock(&mutex1recv);
         } else {
@@ -234,6 +220,7 @@ void *server_thread(void *arg) {
             } else if (recv_buffer2.size > 0) {
                 printf("[%s - Server] Received message: %s\n", process_id, recv_buffer2.buffer);
                 pthread_cond_signal(&cond21);
+                printf("[%s - Server] brain 2 notified\n", process_id);
             }
             pthread_mutex_unlock(&mutex2recv);
         }
