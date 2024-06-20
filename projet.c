@@ -1,3 +1,20 @@
+[2 - Brain] start brain
+[2 - Brain] waiting for message
+connect: Connection refused
+[1 - Brain] start brain
+[1 - Brain] waiting for message
+[Process 2 - Client] waiting to send message
+[Process 1 - Client] Sending message: Bonjour
+[Process 1 - Client] waiting to send message
+[Process 2 - Server] Received message: Bonjour
+[2 - Brain] processing message: Bonjour2
+[2 - Brain] message processed
+[2 - Brain] start brain
+[2 - Brain] waiting for message
+[Process 2 - Client] Sending message: Bonjour2
+[Process 2 - Client] waiting to send message
+[Process 1 - Server] Received message: Bonjour2
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
