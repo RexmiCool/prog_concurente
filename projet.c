@@ -1,8 +1,3 @@
-[2 - Brain] start brain
-[Process 1 - Client] Sending message: Bonjour
-[1 - Brain] start brain
-[Process 2 - Server] Received message: Bonjour
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
