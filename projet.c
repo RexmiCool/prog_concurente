@@ -44,22 +44,20 @@ void *brain_thread(void *arg) {
     while (!stop) {
         if (strstr(path, "1")) {
             printf("[%s - Brain] start brain\n", process_id);
+            pthread_mutex_lock(&mutex1recv);
             while (recv_buffer1.size == 0 && !stop) {
                 pthread_cond_wait(&cond11, &mutex1recv);
             }
 
-            pthread_mutex_lock(&mutex1recv);
-            pthread_mutex_lock(&mutex1send);
-
             if (stop) {
                 pthread_mutex_unlock(&mutex1recv);
-                pthread_mutex_unlock(&mutex1send);
                 break;
             }
 
             strcat(recv_buffer1.buffer, process_id);
             recv_buffer1.size = strlen(recv_buffer1.buffer) + 1;
 
+            pthread_mutex_lock(&mutex1send);
             memcpy(send_buffer1.buffer, recv_buffer1.buffer, recv_buffer1.size);
             send_buffer1.size = recv_buffer1.size;
             recv_buffer1.size = 0;
@@ -69,22 +67,20 @@ void *brain_thread(void *arg) {
             printf("[%s - Brain] stop brain\n", process_id);
         } else {
             printf("[%s - Brain] start brain\n", process_id);
+            pthread_mutex_lock(&mutex2recv);
             while (recv_buffer2.size == 0 && !stop) {
                 pthread_cond_wait(&cond21, &mutex2recv);
             }
 
-            pthread_mutex_lock(&mutex2recv);
-            pthread_mutex_lock(&mutex2send);
-
             if (stop) {
                 pthread_mutex_unlock(&mutex2recv);
-                pthread_mutex_unlock(&mutex2send);
                 break;
             }
 
             strcat(recv_buffer2.buffer, process_id);
             recv_buffer2.size = strlen(recv_buffer2.buffer) + 1;
 
+            pthread_mutex_lock(&mutex2send);
             memcpy(send_buffer2.buffer, recv_buffer2.buffer, recv_buffer2.size);
             send_buffer2.size = recv_buffer2.size;
             recv_buffer2.size = 0;
@@ -138,6 +134,7 @@ void *client_thread(void *arg) {
 
             send_buffer1.size = 0;
             pthread_mutex_unlock(&mutex1send);
+            pthread_cond_signal(&cond21); // Notifier brain 2
         } else {
             pthread_mutex_lock(&mutex2send);
             while (send_buffer2.size == 0 && !stop) {
@@ -156,6 +153,7 @@ void *client_thread(void *arg) {
 
             send_buffer2.size = 0;
             pthread_mutex_unlock(&mutex2send);
+            pthread_cond_signal(&cond11); // Notifier brain 1
         }
 
         close(sockfd);
