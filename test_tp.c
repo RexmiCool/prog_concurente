@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-int taille = 4;
+int taille = 20;
 
 sem_t receive_plein;
 sem_t receive_vide;
@@ -165,7 +165,7 @@ int main(int argc, char const *argv[])
         tourProd = 0;
         tourCons = 0;
 
-        chaineAEnvoyer = "BoNjOuR";
+        chaineAEnvoyer = "Bonjour Bonjour Bonjour";
         nbTour = strlen(chaineAEnvoyer);
 
         bufferServBrain = superMalloc(taille);

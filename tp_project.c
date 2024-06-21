@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-int taille = 4;
+int taille = 20;
 
 sem_t receive_plein;
 sem_t receive_vide;
@@ -25,20 +25,20 @@ int nbTour;
 char *chaineAEnvoyer;
 char *chaineRecue;
 
-void superMalloc(char *buffer)
+char* superMalloc(int size)
 {
-    buffer = (char *)malloc(taille);
-    chaineRecue = (char *)malloc(taille + 1);
-    for (int i = 0; i < taille; i++)
-    {
-        buffer[i] = ' ';
+    char *buffer = (char *)malloc(size);
+    if (!buffer) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
     }
+    memset(buffer, ' ', size);
+    return buffer;
 }
 
 void superFree(char *buffer)
 {
     free(buffer);
-    free(chaineRecue);
 }
 
 void P(sem_t *val)
@@ -69,7 +69,7 @@ void *thread_client(void *arg)
         P(&sending_plein);
         P(&sending_mutex);
 
-        prendre(&bufferBrainClient);
+        prendre(bufferBrainClient);
         printf("Client: - %c\n", chaineRecue[tourCons]);
 
         V(&sending_mutex);
@@ -89,7 +89,7 @@ void *thread_server(void *arg)
         P(&receive_vide);
         P(&receive_mutex);
 
-        placer(&bufferServBrain);
+        placer(bufferServBrain);
         printf("Server: + %c\n", chaineAEnvoyer[tourProd]);
 
         V(&receive_mutex);
@@ -109,7 +109,7 @@ void *thread_brain(void *arg)
         P(&receive_plein);
         P(&receive_mutex);
 
-        prendre(&bufferServBrain);
+        prendre(bufferServBrain);
         printf("Brain: - %c\n", chaineRecue[tourCons]);
 
         V(&receive_mutex);
@@ -127,7 +127,7 @@ void *thread_brain(void *arg)
         P(&sending_vide);
         P(&sending_mutex);
 
-        placer(&bufferBrainClient);
+        placer(bufferBrainClient);
         printf("Brain: + %c\n", chaineAEnvoyer[tourProd]);
 
         V(&sending_mutex);
@@ -149,12 +149,11 @@ void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain)
 
 int main(int argc, char const *argv[])
 {
-    pid_t pid1, pid2;
+    pid_t pid1;
 
     // Création du processus fils 1 (process1)
     if ((pid1 = fork()) == 0)
     {
-
         sem_init(&receive_plein, 0, 0);
         sem_init(&receive_vide, 0, taille);
         sem_init(&receive_mutex, 0, 1);
@@ -166,11 +165,12 @@ int main(int argc, char const *argv[])
         tourProd = 0;
         tourCons = 0;
 
-        chaineAEnvoyer = "BoNjOuR";
+        chaineAEnvoyer = "Bonjour Bonjour Bonjour";
         nbTour = strlen(chaineAEnvoyer);
 
-        superMalloc(bufferServBrain);
-        superMalloc(bufferBrainClient);
+        bufferServBrain = superMalloc(taille);
+        bufferBrainClient = superMalloc(taille);
+        chaineRecue = (char *)malloc(taille + 1);
 
         printf("\n [ Process %d ] - Chaîne à envoyer : %s \n", getpid(), chaineAEnvoyer);
 
@@ -182,6 +182,7 @@ int main(int argc, char const *argv[])
         pthread_join(tid_server, NULL);
         pthread_join(tid_brain, NULL);
 
+        chaineRecue[tourCons] = '\0';
         printf("\n [ Process %d ] - Chaine recue: %s\n", getpid(), chaineRecue);
 
         sem_destroy(&receive_plein);
@@ -191,7 +192,8 @@ int main(int argc, char const *argv[])
         sem_destroy(&sending_vide);
         sem_destroy(&sending_mutex);
         
-        free(bufferServBrain);
+        superFree(bufferServBrain);
+        superFree(bufferBrainClient);
         free(chaineRecue);
 
         printf("Fin du processus fils 1\n");
@@ -203,32 +205,8 @@ int main(int argc, char const *argv[])
         exit(1);
     }
 
-    /* Création du processus fils 2 (process2)
-    pid2 = fork();
-    if (pid2 == 0)
-    {
-        // Code exécuté dans le processus fils 2
-        pthread_t tid_client, tid_server, tid_brain;
-
-        create_threads(&tid_client, &tid_server, &tid_brain);
-
-        pthread_join(tid_client, NULL);
-        pthread_join(tid_server, NULL);
-        pthread_join(tid_brain, NULL);
-
-        printf("Fin du processus fils 2\n");
-        exit(0);
-    }
-    else if (pid2 < 0)
-    {
-        perror("fork");
-        exit(1);
-    }
-    */
-
     // Attente de la terminaison des processus fils
     waitpid(pid1, NULL, 0);
-    //waitpid(pid2, NULL, 0);
 
     printf("Fin du programme principal\n");
     return 0;
