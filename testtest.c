@@ -7,6 +7,7 @@
 #include <semaphore.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <asm-generic/socket.h>
 
 #define PORT 8080
 #define TAILLE 20
