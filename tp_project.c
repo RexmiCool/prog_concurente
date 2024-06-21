@@ -120,7 +120,6 @@ void *thread_brain(void *arg)
 
     tourProd = 0;
     tourCons = 0;
-    nbTour++;
 
     while (tourProd < nbTour)
     {
