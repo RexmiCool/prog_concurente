@@ -55,14 +55,18 @@ void *brain_thread(void *arg) {
                 break;
             }
 
+            printf("[%s - Brain] Buffer before processing: %s\n", process_id, recv_buffer1.buffer);
+
             strcat(recv_buffer1.buffer, process_id);
             recv_buffer1.size = strlen(recv_buffer1.buffer) + 1;
             printf("[%s - Brain] processing message: %s\n", process_id, recv_buffer1.buffer);
 
             pthread_mutex_lock(&mutex1send);
+            printf("[%s - Brain] Send buffer before copying: %s\n", process_id, send_buffer1.buffer);
             memcpy(send_buffer1.buffer, recv_buffer1.buffer, recv_buffer1.size);
             send_buffer1.size = recv_buffer1.size;
             recv_buffer1.size = 0;
+            printf("[%s - Brain] Send buffer after copying: %s\n", process_id, send_buffer1.buffer);
             pthread_mutex_unlock(&mutex1recv);
             pthread_mutex_unlock(&mutex1send);
             pthread_cond_signal(&cond12);
@@ -80,14 +84,18 @@ void *brain_thread(void *arg) {
                 break;
             }
 
+            printf("[%s - Brain] Buffer before processing: %s\n", process_id, recv_buffer2.buffer);
+
             strcat(recv_buffer2.buffer, process_id);
             recv_buffer2.size = strlen(recv_buffer2.buffer) + 1;
             printf("[%s - Brain] processing message: %s\n", process_id, recv_buffer2.buffer);
 
             pthread_mutex_lock(&mutex2send);
+            printf("[%s - Brain] Send buffer before copying: %s\n", process_id, send_buffer2.buffer);
             memcpy(send_buffer2.buffer, recv_buffer2.buffer, recv_buffer2.size);
             send_buffer2.size = recv_buffer2.size;
             recv_buffer2.size = 0;
+            printf("[%s - Brain] Send buffer after copying: %s\n", process_id, send_buffer2.buffer);
             pthread_mutex_unlock(&mutex2recv);
             pthread_mutex_unlock(&mutex2send);
             pthread_cond_signal(&cond22);
@@ -132,7 +140,7 @@ void *client_thread(void *arg) {
                 break;
             }
 
-            printf("[%s - Client] Sending message: %s\n", process_id, send_buffer1.buffer);
+            printf("[%s - Client] Send buffer before sending: %s\n", process_id, send_buffer1.buffer);
             if (send(sockfd, send_buffer1.buffer, send_buffer1.size, 0) == -1) {
                 perror("send");
             }
@@ -153,7 +161,7 @@ void *client_thread(void *arg) {
                 break;
             }
 
-            printf("[%s - Client] Sending message: %s\n", process_id, send_buffer2.buffer);
+            printf("[%s - Client] Send buffer before sending: %s\n", process_id, send_buffer2.buffer);
             if (send(sockfd, send_buffer2.buffer, send_buffer2.size, 0) == -1) {
                 perror("send");
             }
@@ -183,6 +191,54 @@ void *server_thread(void *arg) {
 
     addr.sun_family = AF_UNIX;
     strcpy(addr.sun_path, path);
+    unlink(path);
+
+    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
+        perror("bind");
+        exit(1);
+    }
+
+    if (listen(sockfd, 5) == -1) {
+        perror("listen");
+        exit(1);
+    }
+
+    while (!stop) {
+        if ((clientfd = accept(sockfd, NULL, NULL)) == -1) {
+            perror("accept");
+            exit(1);
+        }
+
+        if (strstr(path, "1")) {
+            pthread_mutex_lock(&mutex1recv);
+            printf("[%s - Server] Receive buffer before receiving: %s\n", process_id, recv_buffer1.buffer);
+            recv_buffer1.size = recv(clientfd, recv_buffer1.buffer, BUFFER_SIZE, 0);
+            if (recv_buffer1.size == -1) {
+                perror("recv");
+            } else if (recv_buffer1.size > 0) {
+                printf("[%s - Server] Received message: %s\n", process_id, recv_buffer1.buffer);
+                pthread_cond_signal(&cond11);
+                printf("[%s - Server] brain 1 notified\n", process_id);
+            }
+            pthread_mutex_unlock(&mutex1recv);
+        } else {
+            pthread_mutex_lock(&mutex2recv);
+            printf("[%s - Server] Receive buffer before receiving: %s\n", process_id, recv_buffer2.buffer);
+            recv_buffer2.size = recv(clientfd, recv_buffer2.buffer, BUFFER_SIZE, 0);
+            if (recv_buffer2.size == -1) {
+                perror("recv");
+            } else if (recv_buffer2.size > 0) {
+                printf("[%s - Server] Received message: %s\n", process_id, recv_buffer2.buffer);
+                pthread_cond_signal(&cond21);
+                printf("[%s - Server] brain 2 notified\n", process_id);
+            }
+            pthread_mutex_unlock(&mutex2recv);
+        }
+
+        close(clientfd);
+    }
+
+    close(sockfd);
     unlink(path);
 
     if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
