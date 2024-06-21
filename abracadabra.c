@@ -110,33 +110,35 @@ void *thread_client(void *arg) {
     printf("[ Process %d ] - Thread Client\n", pid);
     if ((sockfd1 = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
 
-    // Option pour réutiliser l'adresse et le port
-    int enable = 1;
-    if (setsockopt(sockfd1, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
-        error("setsockopt");
-    }
+    // Activer SO_REUSEADDR pour réutiliser l'adresse locale
+    int opt = 1;
+    if (setsockopt(sockfd1, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+        error("setsockopt failed");
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(pid == 1 ? PORT2 : PORT1);
 
-    while (connect(sockfd1, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        perror("Client connect");
-        sleep(1);
-    }
-
     while (1) {
-        sem_wait(&sending_plein);
-        sem_wait(&sending_mutex);
+        if (connect(sockfd1, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+            perror("Client connect");
+            sleep(1);
+            continue;  // Réessayer la connexion
+        }
 
-        printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient);
-        send(sockfd1, bufferBrainClient, strlen(bufferBrainClient), 0);
+        while (1) {
+            sem_wait(&sending_plein);
+            sem_wait(&sending_mutex);
 
-        sem_post(&sending_mutex);
-        sem_post(&sending_vide);
+            printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient);
+            send(sockfd1, bufferBrainClient, strlen(bufferBrainClient), 0);
 
-        sleep(1);
+            sem_post(&sending_mutex);
+            sem_post(&sending_vide);
+
+            sleep(1);
+        }
     }
 
     close(sockfd1);
@@ -152,86 +154,10 @@ void *thread_server(void *arg) {
     printf("[ Process %d ] - Thread Server\n", pid);
     if ((sockfd2 = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
 
-    // Option pour réutiliser l'adresse et le port
-    int enable = 1;
-    if (setsockopt(sockfd2, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
-        error("setsockopt");
-    }
-
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(pid == 1 ? PORT1 : PORT2);
-
-    if (bind(sockfd2, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");
-    listen(sockfd2, 5);
-    clilen = sizeof(cli_addr);
-
-    if ((newsockfd1 = accept(sockfd2, (struct sockaddr *)&cli_addr, &clilen)) < 0) error("ERROR on accept");
-
-    while (1) {
-        sem_wait(&receive_vide);
-        sem_wait(&receive_mutex);
-
-        recv(newsockfd1, bufferServBrain, BUFFER_SIZE, 0);
-        printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain);
-
-        sem_post(&receive_mutex);
-        sem_post(&receive_plein);
-
-        sleep(1);
-    }
-
-    close(newsockfd1);
-    close(sockfd2);
-    free(arg);
-    return NULL;
-}
-
-void *thread_brain(void *arg) {
-    int pid = *(int *)arg;
-    printf("[ Process %d ] - Thread Brain\n", pid);
-
-    if (pid == 1) {
-        strcpy(bufferBrainClient, "bonjour");
-        sem_post(&sending_plein);
-    }
-
-    while (1) {
-        sem_wait(&receive_plein);
-        sem_wait(&receive_mutex);
-
-        strcpy(bufferClient, bufferServBrain);
-        sprintf(bufferBrainClient, "%s%d", bufferClient, pid);
-        printf("[ Process %d ] - Brain modifié: %s\n", pid, bufferBrainClient);
-
-        sem_post(&receive_mutex);
-        sem_post(&receive_vide);
-
-        sem_post(&sending_plein);
-        sem_wait(&sending_mutex);
-
-        strcpy(bufferBrainClient, bufferClient);
-        sprintf(bufferBrainClient, "%s%d", bufferClient, pid);
-        printf("[ Process %d ] - Brain envoie: %s\n", pid, bufferBrainClient);
-
-        sem_post(&sending_mutex);
-        sem_post(&sending_plein);
-
-        sleep(1);
-    }
-
-    free(arg);
-    return NULL;
-}
-
-void *thread_server(void *arg) {
-    int pid = *(int *)arg;
-    struct sockaddr_in serv_addr, cli_addr;
-    socklen_t clilen;
-
-    printf("[ Process %d ] - Thread Server\n", pid);
-    if ((sockfd2 = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
+    // Activer SO_REUSEADDR pour réutiliser l'adresse locale
+    int opt = 1;
+    if (setsockopt(sockfd2, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+        error("setsockopt failed");
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
