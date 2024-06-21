@@ -222,14 +222,6 @@ void cleanup(int signum) {
     close(sockfd2);
     close(newsockfd2);
 
-    // Annuler les threads
-    pthread_cancel(tid_client1);
-    pthread_cancel(tid_server1);
-    pthread_cancel(tid_brain1);
-    pthread_cancel(tid_client2);
-    pthread_cancel(tid_server2);
-    pthread_cancel(tid_brain2);
-
     exit(0);
 }
 
