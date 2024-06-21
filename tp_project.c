@@ -8,9 +8,13 @@
 
 int taille = 4;
 
-sem_t plein;
-sem_t vide;
-sem_t mutex;
+sem_t receive_plein;
+sem_t receive_vide;
+sem_t receive_mutex;
+
+sem_t sending_plein;
+sem_t sending_vide;
+sem_t sending_mutex;
 
 char *bufferServBrain;
 char *bufferBrainClient;
@@ -62,14 +66,14 @@ void *thread_client(void *arg)
     printf("[ Process %d ] - Thread Client\n", getpid());
     while (tourCons < nbTour)
     {
-        P(&plein);
-        P(&mutex);
+        P(&sending_plein);
+        P(&sending_mutex);
 
-        prendre(&bufferServBrain);
+        prendre(&bufferBrainClient);
         printf("Client: - %c\n", chaineRecue[tourCons]);
 
-        V(&mutex);
-        V(&vide);
+        V(&sending_mutex);
+        V(&sending_vide);
 
         tourCons++;
     }
@@ -82,14 +86,14 @@ void *thread_server(void *arg)
     printf("[ Process %d ] - Thread Server\n", getpid());
     while (tourProd < nbTour)
     {
-        P(&vide);
-        P(&mutex);
+        P(&receive_vide);
+        P(&receive_mutex);
 
         placer(&bufferServBrain);
         printf("Server: + %c\n", chaineAEnvoyer[tourProd]);
 
-        V(&mutex);
-        V(&plein);
+        V(&receive_mutex);
+        V(&receive_plein);
 
         tourProd++;
     }
@@ -102,36 +106,35 @@ void *thread_brain(void *arg)
     printf("[ Process %d ] - Thread Brain\n", getpid());
     while (tourCons < nbTour)
     {
-        P(&plein);
-        P(&mutex);
+        P(&receive_plein);
+        P(&receive_mutex);
 
         prendre(&bufferServBrain);
         printf("Brain: - %c\n", chaineRecue[tourCons]);
 
-        V(&mutex);
-        V(&vide);
+        V(&receive_mutex);
+        V(&receive_vide);
 
         tourCons++;
     }
 
-    /*chaineRecue[nbTour+1] = 'B';
     tourProd = 0;
     tourCons = 0;
     nbTour++;
 
     while (tourProd < nbTour)
     {
-        P(&vide);
-        P(&mutex);
+        P(&sending_vide);
+        P(&sending_mutex);
 
         placer(&bufferBrainClient);
         printf("Brain: + %c\n", chaineAEnvoyer[tourProd]);
 
-        V(&mutex);
-        V(&plein);
+        V(&sending_mutex);
+        V(&sending_plein);
 
         tourProd++;
-    }*/
+    }
     
     sleep(2);
     return NULL;
@@ -139,7 +142,7 @@ void *thread_brain(void *arg)
 
 void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain)
 {
-    //pthread_create(client, NULL, thread_client, NULL);
+    pthread_create(client, NULL, thread_client, NULL);
     pthread_create(server, NULL, thread_server, NULL);
     pthread_create(brain, NULL, thread_brain, NULL);
 }
@@ -152,9 +155,13 @@ int main(int argc, char const *argv[])
     if ((pid1 = fork()) == 0)
     {
 
-        sem_init(&plein, 0, 0);
-        sem_init(&vide, 0, taille);
-        sem_init(&mutex, 0, 1);
+        sem_init(&receive_plein, 0, 0);
+        sem_init(&receive_vide, 0, taille);
+        sem_init(&receive_mutex, 0, 1);
+
+        sem_init(&sending_plein, 0, 0);
+        sem_init(&sending_vide, 0, taille);
+        sem_init(&sending_mutex, 0, 1);
 
         tourProd = 0;
         tourCons = 0;
@@ -177,9 +184,12 @@ int main(int argc, char const *argv[])
 
         printf("\n [ Process %d ] - Chaine recue: %s\n", getpid(), chaineRecue);
 
-        sem_destroy(&plein);
-        sem_destroy(&vide);
-        sem_destroy(&mutex);
+        sem_destroy(&receive_plein);
+        sem_destroy(&receive_vide);
+        sem_destroy(&receive_mutex);
+        sem_destroy(&sending_plein);
+        sem_destroy(&sending_vide);
+        sem_destroy(&sending_mutex);
         
         free(bufferServBrain);
         free(chaineRecue);
