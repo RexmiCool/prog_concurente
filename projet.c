@@ -66,6 +66,7 @@ void *brain_thread(void *arg) {
             memcpy(send_buffer1.buffer, recv_buffer1.buffer, recv_buffer1.size);
             send_buffer1.size = recv_buffer1.size;
             recv_buffer1.size = 0;
+            memset(recv_buffer1.buffer, 0, BUFFER_SIZE);
             printf("[%s - Brain] Send buffer after copying: %s\n", process_id, send_buffer1.buffer);
             pthread_mutex_unlock(&mutex1recv);
             pthread_mutex_unlock(&mutex1send);
@@ -95,6 +96,7 @@ void *brain_thread(void *arg) {
             memcpy(send_buffer2.buffer, recv_buffer2.buffer, recv_buffer2.size);
             send_buffer2.size = recv_buffer2.size;
             recv_buffer2.size = 0;
+            memset(recv_buffer2.buffer, 0, BUFFER_SIZE);
             printf("[%s - Brain] Send buffer after copying: %s\n", process_id, send_buffer2.buffer);
             pthread_mutex_unlock(&mutex2recv);
             pthread_mutex_unlock(&mutex2send);
@@ -146,6 +148,7 @@ void *client_thread(void *arg) {
             }
 
             send_buffer1.size = 0;
+            memset(send_buffer1.buffer, 0, BUFFER_SIZE);
             pthread_mutex_unlock(&mutex1send);
             pthread_cond_signal(&cond21); // Notifier brain 2
             printf("[%s - Client] Message sent and brain 2 notified\n", process_id);
@@ -167,6 +170,7 @@ void *client_thread(void *arg) {
             }
 
             send_buffer2.size = 0;
+            memset(send_buffer2.buffer, 0, BUFFER_SIZE);
             pthread_mutex_unlock(&mutex2send);
             pthread_cond_signal(&cond11); // Notifier brain 1
             printf("[%s - Client] Message sent and brain 1 notified\n", process_id);
