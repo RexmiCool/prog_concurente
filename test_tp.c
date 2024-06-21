@@ -5,6 +5,9 @@
 #include <errno.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
 
 int taille = 20;
 
@@ -63,32 +66,79 @@ void prendre(char *buffer)
 
 void *thread_client(void *arg)
 {
+    int sockfd, servlen;
+    struct sockaddr_un serv_addr;
+    char tampon[30];
+    bzero((char *)&serv_addr, sizeof(serv_addr));
+    serv_addr.sun_family = AF_UNIX;
+    strcpy(serv_addr.sun_path, "/tmp/socketLocale.1");
+    servlen = strlen(serv_addr.sun_path) + sizeof(serv_addr.sun_family);
+
+    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+        perror("Erreur de creation de socket");
+        exit(1);
+    }
+    if (connect(sockfd, (struct sockaddr *)&serv_addr, servlen) < 0) {
+        perror("Erreur de creation de connect");
+        exit(1);
+    }
+
     printf("[ Process %d ] - Thread Client\n", getpid());
-    while (tourCons < nbTour)
-    {
+    while (tourCons < nbTour) {
         P(&sending_plein);
         P(&sending_mutex);
 
         prendre(bufferBrainClient);
         printf("Client: - %c\n", chaineRecue[tourCons]);
 
+        // Envoyer le message au serveur
+        write(sockfd, &chaineRecue[tourCons], 1);
+
         V(&sending_mutex);
         V(&sending_vide);
 
         tourCons++;
     }
+
+    close(sockfd);
     sleep(2);
     return NULL;
 }
 
 void *thread_server(void *arg)
 {
+    int sockfd, newsockfd, clilen, servlen;
+    struct sockaddr_un cli_addr, serv_addr;
+    char tampon[30];
+    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+        perror("Erreur de creation de socket");
+        exit(1);
+    }
+    bzero((char *)&serv_addr, sizeof(serv_addr));
+    serv_addr.sun_family = AF_UNIX;
+    strcpy(serv_addr.sun_path, "/tmp/socketLocale.1");
+    servlen = strlen(serv_addr.sun_path) + sizeof(serv_addr.sun_family);
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, servlen) < 0) {
+        perror("Erreur de bind");
+        exit(1);
+    }
+    listen(sockfd, 5);
+    clilen = sizeof(cli_addr);
     printf("[ Process %d ] - Thread Server\n", getpid());
-    while (tourProd < nbTour)
-    {
+
+    newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+    if (newsockfd < 0) {
+        perror("Erreur de accept");
+        exit(1);
+    }
+
+    while (tourProd < nbTour) {
         P(&receive_vide);
         P(&receive_mutex);
 
+        // Lire le message du client
+        read(newsockfd, tampon, 1);
+        chaineAEnvoyer[tourProd] = tampon[0];
         placer(bufferServBrain);
         printf("Server: + %c\n", chaineAEnvoyer[tourProd]);
 
@@ -97,6 +147,9 @@ void *thread_server(void *arg)
 
         tourProd++;
     }
+
+    close(newsockfd);
+    close(sockfd);
     sleep(2);
     return NULL;
 }
