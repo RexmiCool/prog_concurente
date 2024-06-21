@@ -121,6 +121,7 @@ void *thread_client(void *arg) {
         sem_wait(&sending_plein);
         sem_wait(&sending_mutex);
 
+        printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient);
         send(sockfd, bufferBrainClient, strlen(bufferBrainClient), 0);
 
         sem_post(&sending_mutex);
@@ -161,6 +162,7 @@ void *thread_server(void *arg) {
         sem_wait(&receive_mutex);
 
         recv(newsockfd, bufferServBrain, BUFFER_SIZE, 0);
+        printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain);
 
         sem_post(&receive_mutex);
         sem_post(&receive_plein);
@@ -178,21 +180,28 @@ void *thread_brain(void *arg) {
     int pid = *(int *)arg;
     printf("[ Process %d ] - Thread Brain\n", pid);
 
+    if (pid == 1) {
+        strcpy(bufferBrainClient, "bonjour");
+        sem_post(&sending_plein);
+    }
+
     while (1) {
         sem_wait(&receive_plein);
         sem_wait(&receive_mutex);
 
         strcpy(bufferClient, bufferServBrain);
         sprintf(bufferBrainClient, "%s%d", bufferClient, pid);
+        printf("[ Process %d ] - Brain modifié: %s\n", pid, bufferBrainClient);
 
         sem_post(&receive_mutex);
         sem_post(&receive_vide);
 
-        sem_wait(&sending_vide);
+        sem_post(&sending_plein);
         sem_wait(&sending_mutex);
 
         strcpy(bufferBrainClient, bufferClient);
         sprintf(bufferBrainClient, "%s%d", bufferClient, pid);
+        printf("[ Process %d ] - Brain envoie: %s\n", pid, bufferBrainClient);
 
         sem_post(&sending_mutex);
         sem_post(&sending_plein);
