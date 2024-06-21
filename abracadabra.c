@@ -31,6 +31,7 @@ char bufferServer[BUFFER_SIZE];
 int sockfd1, newsockfd1, sockfd2, newsockfd2;
 pthread_t tid_client1, tid_server1, tid_brain1;
 pthread_t tid_client2, tid_server2, tid_brain2;
+pid_t pid1, pid2;
 
 void *thread_client(void *arg);
 void *thread_server(void *arg);
@@ -39,16 +40,10 @@ void *thread_brain(void *arg);
 void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, int pid);
 void error(const char *msg);
 void cleanup(int signum);
-void sigusr1_handler(int signum);
+void signal_handler(int signum);
 
 int main(int argc, char *argv[]) {
-    struct sigaction sa_int, sa_usr1;
-    sa_int.sa_handler = cleanup;
-    sa_int.sa_flags = 0;
-    sigemptyset(&sa_int.sa_mask);
-    sigaction(SIGINT, &sa_int, NULL);
-
-    sigusr1_handler(SIGUSR1); // Setup handler for SIGUSR1 in the parent
+    signal(SIGINT, signal_handler);
 
     sem_init(&receive_plein, 0, 0);
     sem_init(&receive_vide, 0, 1);
@@ -57,8 +52,6 @@ int main(int argc, char *argv[]) {
     sem_init(&sending_plein, 0, 0);
     sem_init(&sending_vide, 0, 1);
     sem_init(&sending_mutex, 0, 1);
-
-    pid_t pid1, pid2;
 
     // Création du processus fils 1 (process1)
     if ((pid1 = fork()) == 0) {
@@ -220,17 +213,33 @@ void *thread_brain(void *arg) {
     return NULL;
 }
 
+void signal_handler(int signum) {
+    if (signum == SIGINT) {
+        printf("\nReceived SIGINT. Sending SIGUSR1 to child processes...\n");
+
+        // Envoyer SIGUSR1 aux processus fils
+        if (pid1 > 0) kill(pid1, SIGUSR1);
+        if (pid2 > 0) kill(pid2, SIGUSR1);
+
+        // Attendre la terminaison des processus fils
+        waitpid(pid1, NULL, 0);
+        waitpid(pid2, NULL, 0);
+
+        // Nettoyage et sortie
+        cleanup(signum);
+    }
+}
+
 void cleanup(int signum) {
-    printf("\nCleaning up and exiting...\n");
+    printf("Cleaning up and exiting...\n");
 
-    // Envoyer SIGUSR1 aux fils
-    kill(pid1, SIGUSR1);
-    kill(pid2, SIGUSR1);
+    // Fermer les sockets
+    close(sockfd1);
+    close(newsockfd1);
+    close(sockfd2);
+    close(newsockfd2);
 
-    // Attente de la terminaison des processus fils
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, NULL, 0);
-
+    // Détruire les sémaphores
     sem_destroy(&receive_plein);
     sem_destroy(&receive_vide);
     sem_destroy(&receive_mutex);
@@ -238,12 +247,7 @@ void cleanup(int signum) {
     sem_destroy(&sending_vide);
     sem_destroy(&sending_mutex);
 
-    printf("Fin du programme principal\n");
     exit(0);
-}
-
-void sigusr1_handler(int signum) {
-    // Rien à faire ici, juste pour installer le gestionnaire de signal
 }
 
 void error(const char *msg) {
