@@ -23,9 +23,16 @@ sem_t sending_plein;
 sem_t sending_vide;
 sem_t sending_mutex;
 
+sem_t tracker_plein;
+sem_t tracker_vide;
+sem_t tracker_mutex;
+
 char bufferServBrain[BUFFER_SIZE];
 char bufferBrainClient[BUFFER_SIZE];
-char bufferBrainTracker[BUFFER_SIZE]; // Nouveau buffer pour le tracker
+char bufferClient[BUFFER_SIZE];
+char bufferBrainTracker[BUFFER_SIZE];
+char bufferTracker[BUFFER_SIZE];
+char bufferServer[BUFFER_SIZE];
 
 int sockfd1, newsockfd1, sockfd2, newsockfd2;
 pthread_t tid_client1, tid_server1, tid_brain1, tid_tracker1;
@@ -35,7 +42,7 @@ pid_t pid1, pid2;
 void *thread_client(void *arg);
 void *thread_server(void *arg);
 void *thread_brain(void *arg);
-void *thread_tracker(void *arg); // Nouveau thread tracker
+void *thread_tracker(void *arg);
 
 void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, pthread_t *tracker, int pid);
 void error(const char *msg);
@@ -53,6 +60,10 @@ int main(int argc, char *argv[]) {
     sem_init(&sending_vide, 0, 1);
     sem_init(&sending_mutex, 0, 1);
 
+    sem_init(&tracker_plein, 0, 0);
+    sem_init(&tracker_vide, 0, 1);
+    sem_init(&tracker_mutex, 0, 1);
+
     // Création du processus fils 1 (process1)
     if ((pid1 = fork()) == 0) {
         create_threads(&tid_client1, &tid_server1, &tid_brain1, &tid_tracker1, 1);
@@ -60,7 +71,7 @@ int main(int argc, char *argv[]) {
         pthread_join(tid_client1, NULL);
         pthread_join(tid_server1, NULL);
         pthread_join(tid_brain1, NULL);
-        pthread_join(tid_tracker1, NULL); // Attendre le thread tracker
+        pthread_join(tid_tracker1, NULL);
 
         exit(0);
     } else if (pid1 < 0) {
@@ -74,7 +85,7 @@ int main(int argc, char *argv[]) {
         pthread_join(tid_client2, NULL);
         pthread_join(tid_server2, NULL);
         pthread_join(tid_brain2, NULL);
-        pthread_join(tid_tracker2, NULL); // Attendre le thread tracker
+        pthread_join(tid_tracker2, NULL);
 
         exit(0);
     } else if (pid2 < 0) {
@@ -91,6 +102,9 @@ int main(int argc, char *argv[]) {
     sem_destroy(&sending_plein);
     sem_destroy(&sending_vide);
     sem_destroy(&sending_mutex);
+    sem_destroy(&tracker_plein);
+    sem_destroy(&tracker_vide);
+    sem_destroy(&tracker_mutex);
 
     printf("Fin du programme principal\n");
     return 0;
@@ -103,7 +117,7 @@ void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, pthr
     pthread_create(client, NULL, thread_client, arg);
     pthread_create(server, NULL, thread_server, arg);
     pthread_create(brain, NULL, thread_brain, arg);
-    pthread_create(tracker, NULL, thread_tracker, arg); // Créer le thread tracker
+    pthread_create(tracker, NULL, thread_tracker, arg);
 }
 
 void *thread_client(void *arg) {
@@ -145,6 +159,28 @@ void *thread_client(void *arg) {
     }
 
     close(sockfd1);
+    free(arg);
+    return NULL;
+}
+
+void *thread_tracker(void *arg) {
+    int pid = *(int *)arg;
+
+    printf("[ Process %d ] - Thread Tracker\n", pid);
+
+    while (1) {
+        sem_wait(&tracker_plein);
+        sem_wait(&tracker_mutex);
+
+        printf("[ Process %d ] - Tracker envoie: %s\n", pid, bufferBrainTracker);
+        //send(sockfd1, bufferBrainClient, strlen(bufferBrainClient), 0);
+
+        sem_post(&tracker_mutex);
+        sem_post(&tracker_plein);
+
+        sleep(1);
+    }
+
     free(arg);
     return NULL;
 }
@@ -209,37 +245,30 @@ void *thread_brain(void *arg) {
         sprintf(bufferBrainClient, "%s%d", bufferClient, pid);
         printf("[ Process %d ] - Brain modifié: %s\n", pid, bufferBrainClient);
 
-        // Écriture dans le buffer du tracker
-        sem_wait(&sending_vide);
+        sem_post(&receive_mutex);
+        sem_post(&receive_vide);
+
+        sem_post(&sending_plein);
         sem_wait(&sending_mutex);
 
-        strcpy(bufferBrainTracker, bufferBrainClient);
+        strcpy(bufferBrainClient, bufferClient);
+        sprintf(bufferBrainClient, "%s%d", bufferClient, pid);
+        printf("[ Process %d ] - Brain envoie a client: %s\n", pid, bufferBrainClient);
 
         sem_post(&sending_mutex);
         sem_post(&sending_plein);
 
-        sem_post(&receive_mutex);
-        sem_post(&receive_vide);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        sleep(1);
-    }
+        sem_post(&tracker_plein);
+        sem_wait(&tracker_mutex);
 
-    free(arg);
-    return NULL;
-}
+        strcpy(bufferBrainTracker, bufferClient);
+        sprintf(bufferBrainTracker, "%s%d", bufferClient, pid);
+        printf("[ Process %d ] - Brain envoie a tracker: %s\n", pid, bufferBrainTracker);
 
-void *thread_tracker(void *arg) {
-    int pid = *(int *)arg;
-    printf("[ Process %d ] - Thread Tracker\n", pid);
-
-    while (1) {
-        sem_wait(&sending_plein);
-        sem_wait(&sending_mutex);
-
-        printf("[ Process %d ] - Tracker lit: %s\n", pid, bufferBrainTracker);
-
-        sem_post(&sending_mutex);
-        sem_post(&sending_vide);
+        sem_post(&tracker_mutex);
+        sem_post(&tracker_plein);
 
         sleep(1);
     }
@@ -249,19 +278,20 @@ void *thread_tracker(void *arg) {
 }
 
 void signal_handler(int signum) {
-    if (signum == SIGINT){
-    printf("\n[ Process %d ] - Received SIGINT. Sending SIGUSR1 to children...\n", getpid());
+    if (signum == SIGINT) {
+        printf("\nReceived SIGINT. Sending SIGUSR1 to child processes...\n");
 
-    // Envoyer SIGUSR1 aux fils pour les tuer
-    kill(pid1, SIGUSR1);
-    kill(pid2, SIGUSR1);
+        // Envoyer SIGUSR1 aux processus fils
+        if (pid1 > 0) kill(pid1, SIGUSR1);
+        if (pid2 > 0) kill(pid2, SIGUSR1);
 
-    // Attendre la terminaison des fils
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, NULL, 0);
+        // Attendre la terminaison des processus fils
+        waitpid(pid1, NULL, 0);
+        waitpid(pid2, NULL, 0);
 
-    // Nettoyage et sortie
-    cleanup(signum);
+        // Nettoyage et sortie
+        cleanup(signum);
+    }
 }
 
 void cleanup(int signum) {
@@ -280,6 +310,9 @@ void cleanup(int signum) {
     sem_destroy(&sending_plein);
     sem_destroy(&sending_vide);
     sem_destroy(&sending_mutex);
+    sem_destroy(&tracker_plein);
+    sem_destroy(&tracker_vide);
+    sem_destroy(&tracker_mutex);
 
     exit(0);
 }
