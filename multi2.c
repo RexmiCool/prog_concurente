@@ -228,6 +228,31 @@ void *thread_client(void *arg)
     return NULL;
 }*/
 
+
+void *thread_tracker(void *arg)
+{
+    int pid = *(int *)arg;
+
+    //printf("[ Process %d ] - Thread Tracker\n", pid);
+
+    while (1)
+    {
+        sem_wait(&tracker_plein);
+        sem_wait(&tracker_mutex);
+
+        //printf("[ Process %d ] - Tracker envoie: %s\n", pid, bufferBrainTracker);
+        write(pipe_fd[1], bufferBrainTracker, strlen(bufferBrainTracker));
+
+        sem_post(&tracker_mutex);
+        sem_post(&tracker_vide);
+
+        sleep(1);
+    }
+
+    free(arg);
+    return NULL;
+}
+
 void *thread_client(void *arg)
 {
     int pid = *(int *)arg;
@@ -256,7 +281,6 @@ void *thread_client(void *arg)
         {
             port = rand() % NB_PROCESS;
         } while (port == pid);
-        
 
         port = ports[port];
 
@@ -281,37 +305,15 @@ void *thread_client(void *arg)
         printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient);
         send(sockfd, bufferBrainClient, strlen(bufferBrainClient), 0);
 
+        // Clear the buffer after sending the message
+        memset(bufferBrainClient, 0, sizeof(bufferBrainClient));
+
         // Close socket and release resources
         close(sockfd);
         sem_post(&sending_mutex);
         sem_post(&sending_vide);
 
         sleep(1); // Adjust as needed
-    }
-
-    free(arg);
-    return NULL;
-}
-
-
-void *thread_tracker(void *arg)
-{
-    int pid = *(int *)arg;
-
-    //printf("[ Process %d ] - Thread Tracker\n", pid);
-
-    while (1)
-    {
-        sem_wait(&tracker_plein);
-        sem_wait(&tracker_mutex);
-
-        //printf("[ Process %d ] - Tracker envoie: %s\n", pid, bufferBrainTracker);
-        write(pipe_fd[1], bufferBrainTracker, strlen(bufferBrainTracker));
-
-        sem_post(&tracker_mutex);
-        sem_post(&tracker_vide);
-
-        sleep(1);
     }
 
     free(arg);
@@ -344,28 +346,43 @@ void *thread_server(void *arg)
     listen(sockfd, 5);
     clilen = sizeof(cli_addr);
 
-    if ((newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen)) < 0)
-        error("ERROR on accept");
-
     while (1)
     {
-        sem_wait(&receive_vide);
-        sem_wait(&receive_mutex);
+        if ((newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen)) < 0)
+            error("ERROR on accept");
 
-        recv(newsockfd, bufferServBrain, BUFFER_SIZE, 0);
-        printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain);
+        while (1)
+        {
+            sem_wait(&receive_vide);
+            sem_wait(&receive_mutex);
 
-        sem_post(&receive_mutex);
-        sem_post(&receive_plein);
+            memset(bufferServBrain, 0, sizeof(bufferServBrain)); // Clear the buffer before receiving
+            int n = recv(newsockfd, bufferServBrain, BUFFER_SIZE, 0);
+            if (n <= 0)
+            {
+                if (n == 0)
+                    printf("[ Process %d ] - Client disconnected\n", pid);
+                else
+                    perror("recv");
 
-        sleep(1);
+                close(newsockfd);
+                break;
+            }
+
+            printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain);
+
+            sem_post(&receive_mutex);
+            sem_post(&receive_plein);
+
+            sleep(1);
+        }
     }
 
-    close(newsockfd);
     close(sockfd);
     free(arg);
     return NULL;
 }
+
 
 void *thread_brain(void *arg)
 {
