@@ -1,3 +1,21 @@
+gcc gVersion2.c -lpthread -o gVersion2
+gVersion2.c: In function ‘main’:
+gVersion2.c:103:9: warning: implicit declaration of function ‘waitpid’ [-Wimplicit-function-declaration]
+  103 |         waitpid(pids[i], NULL, 0);
+      |         ^~~~~~~
+gVersion2.c: In function ‘thread_client’:
+gVersion2.c:160:14: error: ‘sockfds_client’ undeclared (first use in this function)
+  160 |         if ((sockfds_client[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
+      |              ^~~~~~~~~~~~~~
+gVersion2.c:160:14: note: each undeclared identifier is reported only once for each function it appears in
+gVersion2.c: In function ‘cleanup’:
+gVersion2.c:313:15: error: ‘sockfds_client’ undeclared (first use in this function)
+  313 |         close(sockfds_client[i]);
+      |               ^~~~~~~~~~~~~~
+gVersion2.c:314:15: error: ‘sockfds_server’ undeclared (first use in this function)
+  314 |         close(sockfds_server[i]);
+      |               ^~~~~~~~~~~~~~
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
