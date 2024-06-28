@@ -261,7 +261,6 @@ void *thread_brain(void *arg) {
         sem_wait(&receive_plein[pid]);
         sem_wait(&receive_mutex[pid]);
 
-        int target_pid = rand() % num_processes;
         strcpy(bufferBrainClient[pid], bufferServBrain[pid]);
         sprintf(bufferBrainClient[pid], "%s%d", bufferServBrain[pid], pid);
         printf("[ Process %d ] - Brain modifié: %s\n", pid, bufferBrainClient[pid]);
@@ -269,12 +268,13 @@ void *thread_brain(void *arg) {
         sem_post(&receive_mutex[pid]);
         sem_post(&receive_vide[pid]);
 
-        sem_post(&sending_plein[target_pid]);
+        int target_pid = rand() % num_processes;
+        printf("[ Process %d ] - Brain envoie a client: %d\n", pid, target_pid);
+
+        sem_wait(&sending_vide[target_pid]);
         sem_wait(&sending_mutex[target_pid]);
 
         strcpy(bufferBrainClient[target_pid], bufferBrainClient[pid]);
-        printf("[ Process %d ] - Brain envoie a client: %s\n", pid, bufferBrainClient[pid]);
-
         sem_post(&sending_mutex[target_pid]);
         sem_post(&sending_plein[target_pid]);
 
