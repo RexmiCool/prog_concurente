@@ -277,14 +277,14 @@ void *thread_tracker(void *arg)
 {
     int pid = *(int *)arg;
 
-    printf("[ Process %d ] - Thread Tracker\n", pid);
+    //printf("[ Process %d ] - Thread Tracker\n", pid);
 
     while (1)
     {
         sem_wait(&tracker_plein);
         sem_wait(&tracker_mutex);
 
-        printf("[ Process %d ] - Tracker envoie: %s\n", pid, bufferBrainTracker);
+        //printf("[ Process %d ] - Tracker envoie: %s\n", pid, bufferBrainTracker);
         write(pipe_fd[1], bufferBrainTracker, strlen(bufferBrainTracker));
 
         sem_post(&tracker_mutex);
