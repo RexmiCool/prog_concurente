@@ -26,7 +26,6 @@ sem_t *sending_mutex;
 char **bufferServBrain;
 char **bufferBrainClient;
 
-int *sockfds_client, *sockfds_server;
 int num_processes;
 
 pthread_t *tid_clients, *tid_servers, *tid_brains, *tid_trackers;
@@ -79,8 +78,6 @@ int main(int argc, char *argv[]) {
         sem_init(&sending_mutex[i], 0, 1);
     }
 
-    sockfds_client = malloc(num_processes * sizeof(int));
-    sockfds_server = malloc(num_processes * sizeof(int));
     pids = malloc(num_processes * sizeof(pid_t));
     tid_clients = malloc(num_processes * sizeof(pthread_t));
     tid_servers = malloc(num_processes * sizeof(pthread_t));
@@ -124,8 +121,6 @@ int main(int argc, char *argv[]) {
     free(sending_mutex);
     free(bufferServBrain);
     free(bufferBrainClient);
-    free(sockfds_client);
-    free(sockfds_server);
     free(pids);
     free(tid_clients);
     free(tid_servers);
@@ -154,39 +149,39 @@ void *thread_client(void *arg) {
     struct sockaddr_in serv_addr;
 
     printf("[ Process %d ] - Thread Client\n", pid);
-    if ((sockfds_client[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
-
-    int opt = 1;
-    if (setsockopt(sockfds_client[pid], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-        error("setsockopt failed");
-
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(PORT_BASE + pid);
 
     while (1) {
+        sem_wait(&sending_plein[pid]);
+        sem_wait(&sending_mutex[pid]);
+
+        int target_pid = rand() % num_processes;
+        printf("[ Process %d ] - Client envoie à serveur: %d\n", pid, target_pid);
+
+        if ((sockfds_client[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
+
+        memset(&serv_addr, 0, sizeof(serv_addr));
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_addr.s_addr = INADDR_ANY;
+        serv_addr.sin_port = htons(PORT_BASE + target_pid);
+
         if (connect(sockfds_client[pid], (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
             perror("Client connect");
-            sleep(1);
+            close(sockfds_client[pid]);
+            sem_post(&sending_mutex[pid]);
+            sem_post(&sending_vide[pid]);
             continue;  // Réessayer la connexion
         }
 
-        while (1) {
-            sem_wait(&sending_plein[pid]);
-            sem_wait(&sending_mutex[pid]);
+        printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient[pid]);
+        send(sockfds_client[pid], bufferBrainClient[pid], strlen(bufferBrainClient[pid]), 0);
+        close(sockfds_client[pid]);
 
-            printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient[pid]);
-            send(sockfds_client[pid], bufferBrainClient[pid], strlen(bufferBrainClient[pid]), 0);
+        sem_post(&sending_mutex[pid]);
+        sem_post(&sending_vide[pid]);
 
-            sem_post(&sending_mutex[pid]);
-            sem_post(&sending_vide[pid]);
-
-            sleep(1);
-        }
+        sleep(1);
     }
 
-    close(sockfds_client[pid]);
     free(arg);
     return NULL;
 }
@@ -216,12 +211,14 @@ void *thread_server(void *arg) {
     int pid = *(int *)arg;
     struct sockaddr_in serv_addr, cli_addr;
     socklen_t clilen;
+    int newsockfd;
 
     printf("[ Process %d ] - Thread Server\n", pid);
-    if ((sockfds_server[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) error("ERROR opening socket");
 
     int opt = 1;
-    if (setsockopt(sockfds_server[pid], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
         error("setsockopt failed");
 
     memset(&serv_addr, 0, sizeof(serv_addr));
@@ -229,18 +226,21 @@ void *thread_server(void *arg) {
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(PORT_BASE + pid);
 
-    if (bind(sockfds_server[pid], (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");
-    listen(sockfds_server[pid], 5);
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");
+    listen(sockfd, 5);
     clilen = sizeof(cli_addr);
 
-    if ((sockfds_server[pid] = accept(sockfds_server[pid], (struct sockaddr *)&cli_addr, &clilen)) < 0) error("ERROR on accept");
-
     while (1) {
+        newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+        if (newsockfd < 0) error("ERROR on accept");
+
         sem_wait(&receive_vide[pid]);
         sem_wait(&receive_mutex[pid]);
 
-        recv(sockfds_server[pid], bufferServBrain[pid], BUFFER_SIZE, 0);
+        recv(newsockfd, bufferServBrain[pid], BUFFER_SIZE, 0);
         printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain[pid]);
+
+        close(newsockfd);
 
         sem_post(&receive_mutex[pid]);
         sem_post(&receive_plein[pid]);
@@ -248,7 +248,7 @@ void *thread_server(void *arg) {
         sleep(1);
     }
 
-    close(sockfds_server[pid]);
+    close(sockfd);
     free(arg);
     return NULL;
 }
@@ -331,8 +331,6 @@ void cleanup(int signum) {
     free(sending_mutex);
     free(bufferServBrain);
     free(bufferBrainClient);
-    free(sockfds_client);
-    free(sockfds_server);
     free(pids);
     free(tid_clients);
     free(tid_servers);
