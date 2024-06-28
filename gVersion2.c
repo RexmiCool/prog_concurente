@@ -1,33 +1,3 @@
-./gVersion2 3
-[ Process 0 ] - Thread Server
-[ Process 2 ] - Thread Brain
-[ Process 2 ] - Thread Tracker
-[ Process 0 ] - Thread Client
-Client connect: Connection refused
-[ Process 1 ] - Thread Server
-[ Process 1 ] - Thread Brain
-[ Process 1 ] - Thread Tracker
-[ Process 1 ] - Thread Client
-Client connect: Connection refused
-[ Process 0 ] - Thread Brain
-[ Process 2 ] - Thread Client
-[ Process 2 ] - Thread Server
-[ Process 0 ] - Thread Tracker
-[ Process 0 ] - Tracker envoie: bonjour
-Client connect: Transport endpoint is already connected
-Client connect: Transport endpoint is already connected
-Client connect: Transport endpoint is already connected
-Client connect: Transport endpoint is already connected
-^C
-Received SIGINT. Sending SIGUSR1 to child processes...
-
-Received SIGINT. Sending SIGUSR1 to child processes...
-Cleaning up and exiting...
-
-Received SIGINT. Sending SIGUSR1 to child processes...
-Cleaning up and exiting...
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -56,7 +26,7 @@ sem_t *sending_mutex;
 char **bufferServBrain;
 char **bufferBrainClient;
 
-int *sockfds;
+int *sockfds_client, *sockfds_server;
 int num_processes;
 
 pthread_t *tid_clients, *tid_servers, *tid_brains, *tid_trackers;
@@ -109,7 +79,8 @@ int main(int argc, char *argv[]) {
         sem_init(&sending_mutex[i], 0, 1);
     }
 
-    sockfds = malloc(num_processes * sizeof(int));
+    sockfds_client = malloc(num_processes * sizeof(int));
+    sockfds_server = malloc(num_processes * sizeof(int));
     pids = malloc(num_processes * sizeof(pid_t));
     tid_clients = malloc(num_processes * sizeof(pthread_t));
     tid_servers = malloc(num_processes * sizeof(pthread_t));
@@ -153,7 +124,8 @@ int main(int argc, char *argv[]) {
     free(sending_mutex);
     free(bufferServBrain);
     free(bufferBrainClient);
-    free(sockfds);
+    free(sockfds_client);
+    free(sockfds_server);
     free(pids);
     free(tid_clients);
     free(tid_servers);
@@ -172,6 +144,9 @@ void create_threads(int pid) {
     pthread_create(&tid_servers[pid], NULL, thread_server, arg);
     pthread_create(&tid_brains[pid], NULL, thread_brain, arg);
     pthread_create(&tid_trackers[pid], NULL, thread_tracker, arg);
+
+    // Pause pour s'assurer que les serveurs sont prêts
+    sleep(2);
 }
 
 void *thread_client(void *arg) {
@@ -179,19 +154,19 @@ void *thread_client(void *arg) {
     struct sockaddr_in serv_addr;
 
     printf("[ Process %d ] - Thread Client\n", pid);
-    if ((sockfds[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
+    if ((sockfds_client[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
 
     int opt = 1;
-    if (setsockopt(sockfds[pid], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    if (setsockopt(sockfds_client[pid], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
         error("setsockopt failed");
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(PORT_BASE + (pid + 1) % num_processes);
+    serv_addr.sin_port = htons(PORT_BASE + pid);
 
     while (1) {
-        if (connect(sockfds[pid], (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        if (connect(sockfds_client[pid], (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
             perror("Client connect");
             sleep(1);
             continue;  // Réessayer la connexion
@@ -202,7 +177,7 @@ void *thread_client(void *arg) {
             sem_wait(&sending_mutex[pid]);
 
             printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient[pid]);
-            send(sockfds[pid], bufferBrainClient[pid], strlen(bufferBrainClient[pid]), 0);
+            send(sockfds_client[pid], bufferBrainClient[pid], strlen(bufferBrainClient[pid]), 0);
 
             sem_post(&sending_mutex[pid]);
             sem_post(&sending_vide[pid]);
@@ -211,7 +186,7 @@ void *thread_client(void *arg) {
         }
     }
 
-    close(sockfds[pid]);
+    close(sockfds_client[pid]);
     free(arg);
     return NULL;
 }
@@ -243,10 +218,10 @@ void *thread_server(void *arg) {
     socklen_t clilen;
 
     printf("[ Process %d ] - Thread Server\n", pid);
-    if ((sockfds[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
+    if ((sockfds_server[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
 
     int opt = 1;
-    if (setsockopt(sockfds[pid], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    if (setsockopt(sockfds_server[pid], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
         error("setsockopt failed");
 
     memset(&serv_addr, 0, sizeof(serv_addr));
@@ -254,17 +229,17 @@ void *thread_server(void *arg) {
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(PORT_BASE + pid);
 
-    if (bind(sockfds[pid], (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");
-    listen(sockfds[pid], 5);
+    if (bind(sockfds_server[pid], (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");
+    listen(sockfds_server[pid], 5);
     clilen = sizeof(cli_addr);
 
-    if ((sockfds[pid] = accept(sockfds[pid], (struct sockaddr *)&cli_addr, &clilen)) < 0) error("ERROR on accept");
+    if ((sockfds_server[pid] = accept(sockfds_server[pid], (struct sockaddr *)&cli_addr, &clilen)) < 0) error("ERROR on accept");
 
     while (1) {
         sem_wait(&receive_vide[pid]);
         sem_wait(&receive_mutex[pid]);
 
-        recv(sockfds[pid], bufferServBrain[pid], BUFFER_SIZE, 0);
+        recv(sockfds_server[pid], bufferServBrain[pid], BUFFER_SIZE, 0);
         printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain[pid]);
 
         sem_post(&receive_mutex[pid]);
@@ -273,7 +248,7 @@ void *thread_server(void *arg) {
         sleep(1);
     }
 
-    close(sockfds[pid]);
+    close(sockfds_server[pid]);
     free(arg);
     return NULL;
 }
@@ -335,7 +310,8 @@ void cleanup(int signum) {
     printf("Cleaning up and exiting...\n");
 
     for (int i = 0; i < num_processes; ++i) {
-        close(sockfds[i]);
+        close(sockfds_client[i]);
+        close(sockfds_server[i]);
     }
 
     for (int i = 0; i < num_processes; ++i) {
@@ -355,7 +331,8 @@ void cleanup(int signum) {
     free(sending_mutex);
     free(bufferServBrain);
     free(bufferBrainClient);
-    free(sockfds);
+    free(sockfds_client);
+    free(sockfds_server);
     free(pids);
     free(tid_clients);
     free(tid_servers);
