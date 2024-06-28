@@ -228,7 +228,7 @@ void *thread_client(void *arg)
     return NULL;
 }*/
 
-void *thread_client(void *arg)
+/*void *thread_client(void *arg)
 {
     int pid = *(int *)arg;
     struct sockaddr_in serv_addr;
@@ -291,7 +291,76 @@ void *thread_client(void *arg)
 
     free(arg);
     return NULL;
+}*/
+
+void *thread_client(void *arg)
+{
+    int pid = *(int *)arg;
+    struct sockaddr_in serv_addr;
+    int sockfd;
+    int connected = 0;
+    int port;
+
+    printf("[ Process %d ] - Thread Client\n", pid);
+
+    while (1)
+    {
+        if (!connected)
+        {
+            // Create socket
+            sockfd = socket(AF_INET, SOCK_STREAM, 0);
+            if (sockfd < 0)
+                error("ERROR opening socket");
+
+            // Activer SO_REUSEADDR pour réutiliser l'adresse locale
+            int opt = 1;
+            if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+                error("setsockopt failed");
+
+            // Randomly select which port to connect to
+            do
+            {
+                port = rand() % NB_PROCESS;
+            } while (port == pid);
+
+            port = ports[port];
+
+            memset(&serv_addr, 0, sizeof(serv_addr));
+            serv_addr.sin_family = AF_INET;
+            serv_addr.sin_addr.s_addr = INADDR_ANY;
+            serv_addr.sin_port = htons(port);
+
+            printf("[ Process %d ] - Client se connecte à: %d\n", pid, port);
+
+            // Attempt connection
+            if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+            {
+                perror("Client connect");
+                close(sockfd);
+                sleep(1);
+                continue; // Retry connection
+            }
+            connected = 1;
+        }
+
+        sem_wait(&sending_plein);
+        sem_wait(&sending_mutex);
+
+        // Send message
+        printf("[ Process %d ] - Client envoie: %s\n", pid, bufferBrainClient);
+        send(sockfd, bufferBrainClient, strlen(bufferBrainClient), 0);
+
+        sem_post(&sending_mutex);
+        sem_post(&sending_vide);
+
+        sleep(1); // Adjust as needed
+    }
+
+    close(sockfd);
+    free(arg);
+    return NULL;
 }
+
 
 
 void *thread_tracker(void *arg)
