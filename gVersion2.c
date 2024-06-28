@@ -1,3 +1,33 @@
+./gVersion2 3
+[ Process 0 ] - Thread Server
+[ Process 2 ] - Thread Brain
+[ Process 2 ] - Thread Tracker
+[ Process 0 ] - Thread Client
+Client connect: Connection refused
+[ Process 1 ] - Thread Server
+[ Process 1 ] - Thread Brain
+[ Process 1 ] - Thread Tracker
+[ Process 1 ] - Thread Client
+Client connect: Connection refused
+[ Process 0 ] - Thread Brain
+[ Process 2 ] - Thread Client
+[ Process 2 ] - Thread Server
+[ Process 0 ] - Thread Tracker
+[ Process 0 ] - Tracker envoie: bonjour
+Client connect: Transport endpoint is already connected
+Client connect: Transport endpoint is already connected
+Client connect: Transport endpoint is already connected
+Client connect: Transport endpoint is already connected
+^C
+Received SIGINT. Sending SIGUSR1 to child processes...
+
+Received SIGINT. Sending SIGUSR1 to child processes...
+Cleaning up and exiting...
+
+Received SIGINT. Sending SIGUSR1 to child processes...
+Cleaning up and exiting...
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
