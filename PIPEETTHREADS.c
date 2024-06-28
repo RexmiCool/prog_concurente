@@ -10,7 +10,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <signal.h>
-#include <fcntl.h>  // Pour les constantes O_WRONLY et O_NONBLOCK
+#include <fcntl.h>
 #include <sys/wait.h>
 
 #define PORT_BASE1 12345
@@ -40,7 +40,7 @@ int sockfd1, newsockfd1, sockfd2, newsockfd2;
 pthread_t *client_threads, *server_threads, *brain_threads, *tracker_threads;
 pid_t *pids;
 
-int pipe_fd[2]; // Descripteurs de fichier pour le tube
+int pipe_fd[2];
 int num_processes;
 
 void *thread_client(void *arg);
@@ -81,14 +81,12 @@ int main(int argc, char *argv[]) {
     sem_init(&tracker_vide, 0, 1);
     sem_init(&tracker_mutex, 0, 1);
 
-    // Allocation dynamique des tableaux de threads et de pids
     client_threads = malloc(num_processes * sizeof(pthread_t));
     server_threads = malloc(num_processes * sizeof(pthread_t));
     brain_threads = malloc(num_processes * sizeof(pthread_t));
     tracker_threads = malloc(num_processes * sizeof(pthread_t));
     pids = malloc(num_processes * sizeof(pid_t));
 
-    // Création du tube (pipe)
     create_pipe();
 
     for (int i = 0; i < num_processes; i++) {
@@ -106,19 +104,15 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Création du processus Observer
     create_observer_process();
 
-    // Attente de la terminaison des processus fils
     for (int i = 0; i < num_processes; i++) {
         waitpid(pids[i], NULL, 0);
     }
 
-    // Fermeture du tube
     close(pipe_fd[0]);
     close(pipe_fd[1]);
 
-    // Destruction des sémaphores
     sem_destroy(&receive_plein);
     sem_destroy(&receive_vide);
     sem_destroy(&receive_mutex);
@@ -129,7 +123,6 @@ int main(int argc, char *argv[]) {
     sem_destroy(&tracker_vide);
     sem_destroy(&tracker_mutex);
 
-    // Libération de la mémoire allouée
     free(client_threads);
     free(server_threads);
     free(brain_threads);
@@ -144,8 +137,9 @@ void create_threads(pthread_t *client, pthread_t *server, pthread_t *brain, pthr
     int *arg = malloc(sizeof(*arg));
     *arg = pid;
 
-    pthread_create(client, NULL, thread_client, arg);
     pthread_create(server, NULL, thread_server, arg);
+    sleep(1);  // Attendre que le serveur soit en écoute
+    pthread_create(client, NULL, thread_client, arg);
     pthread_create(brain, NULL, thread_brain, arg);
     pthread_create(tracker, NULL, thread_tracker, arg);
 }
@@ -157,7 +151,6 @@ void *thread_client(void *arg) {
     printf("[ Process %d ] - Thread Client\n", pid);
     if ((sockfd1 = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
 
-    // Activer SO_REUSEADDR pour réutiliser l'adresse locale
     int opt = 1;
     if (setsockopt(sockfd1, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
         error("setsockopt failed");
@@ -171,7 +164,7 @@ void *thread_client(void *arg) {
         if (connect(sockfd1, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
             perror("Client connect");
             sleep(1);
-            continue;  // Réessayer la connexion
+            continue;
         }
 
         while (1) {
@@ -223,7 +216,6 @@ void *thread_server(void *arg) {
     printf("[ Process %d ] - Thread Server\n", pid);
     if ((sockfd2 = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
 
-    // Activer SO_REUSEADDR pour réutiliser l'adresse locale
     int opt = 1;
     if (setsockopt(sockfd2, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
         error("setsockopt failed");
@@ -315,17 +307,14 @@ void signal_handler(int signum) {
     if (signum == SIGINT) {
         printf("\nReceived SIGINT. Sending SIGUSR1 to child processes...\n");
 
-        // Envoyer SIGUSR1 aux processus fils
         for (int i = 0; i < num_processes; i++) {
             if (pids[i] > 0) kill(pids[i], SIGUSR1);
         }
 
-        // Attendre la terminaison des processus fils
         for (int i = 0; i < num_processes; i++) {
             waitpid(pids[i], NULL, 0);
         }
 
-        // Nettoyage et sortie
         cleanup(signum);
     }
 }
@@ -333,17 +322,14 @@ void signal_handler(int signum) {
 void cleanup(int signum) {
     printf("Cleaning up and exiting...\n");
 
-    // Fermer les sockets
     close(sockfd1);
     close(newsockfd1);
     close(sockfd2);
     close(newsockfd2);
 
-    // Fermer le tube
     close(pipe_fd[0]);
     close(pipe_fd[1]);
 
-    // Détruire les sémaphores
     sem_destroy(&receive_plein);
     sem_destroy(&receive_vide);
     sem_destroy(&receive_mutex);
@@ -354,7 +340,6 @@ void cleanup(int signum) {
     sem_destroy(&tracker_vide);
     sem_destroy(&tracker_mutex);
 
-    // Libérer la mémoire allouée
     free(client_threads);
     free(server_threads);
     free(brain_threads);
@@ -379,30 +364,25 @@ void create_pipe() {
 void create_observer_process() {
     pid_t observer_pid;
 
-    // Fork pour créer le processus Observer
     if ((observer_pid = fork()) == 0) {
         printf("[ Observer ] - Observer process started\n");
 
-        // Fermer l'extrémité d'écriture du tube dans le processus Observer
         close(pipe_fd[1]);
 
-        // Ouvrir un fichier pour écrire le log
         FILE *log_file = fopen("log.txt", "w");
         if (log_file == NULL) {
             perror("Failed to open log file");
             exit(1);
         }
 
-        // Lecture depuis le tube et écriture dans le fichier log
         char buffer[BUFFER_SIZE];
         ssize_t nbytes;
 
         while ((nbytes = read(pipe_fd[0], buffer, BUFFER_SIZE)) > 0) {
             fwrite(buffer, 1, nbytes, log_file);
-            fflush(log_file);  // Assurer l'écriture immédiate dans le fichier
+            fflush(log_file);
         }
 
-        // Fermer le fichier et le tube
         fclose(log_file);
         close(pipe_fd[0]);
 
