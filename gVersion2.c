@@ -1,21 +1,3 @@
-gcc gVersion2.c -lpthread -o gVersion2
-gVersion2.c: In function ‘main’:
-gVersion2.c:103:9: warning: implicit declaration of function ‘waitpid’ [-Wimplicit-function-declaration]
-  103 |         waitpid(pids[i], NULL, 0);
-      |         ^~~~~~~
-gVersion2.c: In function ‘thread_client’:
-gVersion2.c:160:14: error: ‘sockfds_client’ undeclared (first use in this function)
-  160 |         if ((sockfds_client[pid] = socket(AF_INET, SOCK_STREAM, 0)) < 0) error("ERROR opening socket");
-      |              ^~~~~~~~~~~~~~
-gVersion2.c:160:14: note: each undeclared identifier is reported only once for each function it appears in
-gVersion2.c: In function ‘cleanup’:
-gVersion2.c:313:15: error: ‘sockfds_client’ undeclared (first use in this function)
-  313 |         close(sockfds_client[i]);
-      |               ^~~~~~~~~~~~~~
-gVersion2.c:314:15: error: ‘sockfds_server’ undeclared (first use in this function)
-  314 |         close(sockfds_server[i]);
-      |               ^~~~~~~~~~~~~~
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -48,6 +30,9 @@ int num_processes;
 
 pthread_t *tid_clients, *tid_servers, *tid_brains, *tid_trackers;
 pid_t *pids;
+
+int *sockfds_client;
+int *sockfds_server;
 
 void *thread_client(void *arg);
 void *thread_server(void *arg);
@@ -102,6 +87,9 @@ int main(int argc, char *argv[]) {
     tid_brains = malloc(num_processes * sizeof(pthread_t));
     tid_trackers = malloc(num_processes * sizeof(pthread_t));
 
+    sockfds_client = malloc(num_processes * sizeof(int));
+    sockfds_server = malloc(num_processes * sizeof(int));
+
     for (int i = 0; i < num_processes; ++i) {
         if ((pids[i] = fork()) == 0) {
             create_threads(i);
@@ -144,6 +132,8 @@ int main(int argc, char *argv[]) {
     free(tid_servers);
     free(tid_brains);
     free(tid_trackers);
+    free(sockfds_client);
+    free(sockfds_server);
 
     printf("Fin du programme principal\n");
     return 0;
@@ -258,12 +248,10 @@ void *thread_server(void *arg) {
         recv(newsockfd, bufferServBrain[pid], BUFFER_SIZE, 0);
         printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain[pid]);
 
-        close(newsockfd);
-
         sem_post(&receive_mutex[pid]);
         sem_post(&receive_plein[pid]);
 
-        sleep(1);
+        close(newsockfd);
     }
 
     close(sockfd);
@@ -284,22 +272,32 @@ void *thread_brain(void *arg) {
         sem_wait(&receive_plein[pid]);
         sem_wait(&receive_mutex[pid]);
 
-        strcpy(bufferBrainClient[pid], bufferServBrain[pid]);
+        strcpy(bufferServBrain[pid], bufferBrainClient[pid]);
         sprintf(bufferBrainClient[pid], "%s%d", bufferServBrain[pid], pid);
         printf("[ Process %d ] - Brain modifié: %s\n", pid, bufferBrainClient[pid]);
 
         sem_post(&receive_mutex[pid]);
         sem_post(&receive_vide[pid]);
 
-        int target_pid = rand() % num_processes;
-        printf("[ Process %d ] - Brain envoie a client: %d\n", pid, target_pid);
+        sem_post(&sending_plein[pid]);
+        sem_wait(&sending_mutex[pid]);
 
-        sem_wait(&sending_vide[target_pid]);
-        sem_wait(&sending_mutex[target_pid]);
+        strcpy(bufferBrainClient[pid], bufferServBrain[pid]);
+        sprintf(bufferBrainClient[pid], "%s%d", bufferServBrain[pid], pid);
+        printf("[ Process %d ] - Brain envoie à client: %s\n", pid, bufferBrainClient[pid]);
 
-        strcpy(bufferBrainClient[target_pid], bufferBrainClient[pid]);
-        sem_post(&sending_mutex[target_pid]);
-        sem_post(&sending_plein[target_pid]);
+        sem_post(&sending_mutex[pid]);
+        sem_post(&sending_plein[pid]);
+
+        sem_post(&sending_plein[pid]);
+        sem_wait(&sending_mutex[pid]);
+
+        strcpy(bufferBrainClient[pid], bufferServBrain[pid]);
+        sprintf(bufferBrainClient[pid], "%s%d", bufferServBrain[pid], pid);
+        printf("[ Process %d ] - Brain envoie à tracker: %s\n", pid, bufferBrainClient[pid]);
+
+        sem_post(&sending_mutex[pid]);
+        sem_post(&sending_plein[pid]);
 
         sleep(1);
     }
@@ -354,6 +352,8 @@ void cleanup(int signum) {
     free(tid_servers);
     free(tid_brains);
     free(tid_trackers);
+    free(sockfds_client);
+    free(sockfds_server);
 
     exit(0);
 }
