@@ -12,10 +12,13 @@
 #include <signal.h>
 #include <fcntl.h> // Pour les constantes O_WRONLY et O_NONBLOCK
 
-#define PORT1 12345
-#define PORT2 12346
+//#define PORT1 12345
+//#define PORT2 12346
 #define BUFFER_SIZE 1024
 #define NB_PROCESS 3
+
+int ports[NB_PROCESS];
+
 
 sem_t receive_plein;
 sem_t receive_vide;
@@ -108,6 +111,8 @@ int main(int argc, char *argv[])
 
     for (size_t i = 0; i < NB_PROCESS; i++)
     {
+        ports[i] = 12345 + i;
+
         if ((pids[i] = fork()) == 0)
         {
             create_threads(&tid_client, &tid_server, &tid_brain, &tid_tracker, i);
@@ -239,7 +244,14 @@ void *thread_client(void *arg)
             error("setsockopt failed");
 
         // Randomly select which port to connect to
-        int port = (rand() % 2 == 0) ? PORT1 : PORT2;
+        int port;
+        do
+        {
+            port = rand() % NB_PROCESS;
+        } while (port == pid);
+        
+
+        port = ports[port];
 
         memset(&serv_addr, 0, sizeof(serv_addr));
         serv_addr.sin_family = AF_INET;
@@ -315,7 +327,7 @@ void *thread_server(void *arg)
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(pid == 1 ? PORT1 : PORT2);
+    serv_addr.sin_port = htons(ports[pid]);
 
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
         error("ERROR on binding");
