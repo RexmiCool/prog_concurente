@@ -13,8 +13,8 @@
 #include <fcntl.h>  // Pour les constantes O_WRONLY et O_NONBLOCK
 #include <sys/wait.h>
 
-#define PORT1 12345
-#define PORT2 12346
+#define PORT_BASE1 12345
+#define PORT_BASE2 12346
 #define BUFFER_SIZE 1024
 
 sem_t receive_plein;
@@ -165,7 +165,7 @@ void *thread_client(void *arg) {
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(pid % 2 == 1 ? PORT2 : PORT1);
+    serv_addr.sin_port = htons(PORT_BASE1 + pid);
 
     while (1) {
         if (connect(sockfd1, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
@@ -231,28 +231,34 @@ void *thread_server(void *arg) {
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(pid % 2 == 1 ? PORT1 : PORT2);
+    serv_addr.sin_port = htons(PORT_BASE2 + pid);
 
     if (bind(sockfd2, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");
     listen(sockfd2, 5);
     clilen = sizeof(cli_addr);
 
-    if ((newsockfd1 = accept(sockfd2, (struct sockaddr *)&cli_addr, &clilen)) < 0) error("ERROR on accept");
-
     while (1) {
-        sem_wait(&receive_vide);
-        sem_wait(&receive_mutex);
+        newsockfd2 = accept(sockfd2, (struct sockaddr *)&cli_addr, &clilen);
+        if (newsockfd2 < 0) error("ERROR on accept");
 
-        recv(newsockfd1, bufferServBrain, BUFFER_SIZE, 0);
-        printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServBrain);
+        while (1) {
+            memset(bufferServer, 0, BUFFER_SIZE);
+            recv(newsockfd2, bufferServer, BUFFER_SIZE - 1, 0);
+            printf("[ Process %d ] - Server reçu: %s\n", pid, bufferServer);
 
-        sem_post(&receive_mutex);
-        sem_post(&receive_plein);
+            sem_wait(&receive_vide);
+            sem_wait(&receive_mutex);
 
-        sleep(1);
+            strcpy(bufferServBrain, bufferServer);
+
+            sem_post(&receive_mutex);
+            sem_post(&receive_plein);
+
+            sleep(1);
+        }
     }
 
-    close(newsockfd1);
+    close(newsockfd2);
     close(sockfd2);
     free(arg);
     return NULL;
