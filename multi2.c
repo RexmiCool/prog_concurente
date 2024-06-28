@@ -64,6 +64,8 @@ void create_observer_process();
 
 int main(int argc, char *argv[])
 {
+    
+    printf(ports);
     signal(SIGINT, signal_handler);
 
     sem_init(&receive_plein, 0, 0);
@@ -112,7 +114,12 @@ int main(int argc, char *argv[])
     for (size_t i = 0; i < NB_PROCESS; i++)
     {
         ports[i] = 12345 + i;
+    }
 
+    
+
+    for (size_t i = 0; i < NB_PROCESS; i++)
+    {
         if ((pids[i] = fork()) == 0)
         {
             create_threads(&tid_client, &tid_server, &tid_brain, &tid_tracker, i);
@@ -258,6 +265,8 @@ void *thread_client(void *arg)
         serv_addr.sin_addr.s_addr = INADDR_ANY;
         serv_addr.sin_port = htons(port);
 
+        printf("[ Process %d ] - Client se connecte à: %d\n", pid, port);
+
         // Attempt connection
         if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
         {
@@ -328,6 +337,7 @@ void *thread_server(void *arg)
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(ports[pid]);
+    printf("[ Process %d ] - Server se crée sur: %d\n", pid, ports[pid]);
 
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
         error("ERROR on binding");
@@ -362,7 +372,7 @@ void *thread_brain(void *arg)
     int pid = *(int *)arg;
     printf("[ Process %d ] - Thread Brain\n", pid);
 
-    if (pid == 1)
+    if (pid == NB_PROCESS-1)
     {
         strcpy(bufferBrainClient, "bonjour");
         sem_post(&sending_plein);
