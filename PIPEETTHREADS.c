@@ -379,7 +379,8 @@ void create_observer_process() {
         ssize_t nbytes;
 
         while ((nbytes = read(pipe_fd[0], buffer, BUFFER_SIZE)) > 0) {
-            fwrite(buffer, 1, nbytes, log_file);
+            buffer[nbytes] = '\0';  // Null-terminate the buffer
+            fprintf(log_file, "%s\n", buffer);  // Write each log entry on a new line
             fflush(log_file);
         }
 
@@ -392,37 +393,3 @@ void create_observer_process() {
         perror("Failed to fork observer process");
     }
 }
-
-/*
-[ Observer ] - Observer process started
-[ Process 2 ] - Thread Tracker
-[ Process 2 ] - Thread Client
-[ Process 1 ] - Thread Server
-[ Process 1 ] - Thread Client
-[ Process 2 ] - Thread Brain
-[ Process 1 ] - Thread Brain
-[ Process 4 ] - Thread Server
-[ Process 4 ] - Thread Brain
-[ Process 4 ] - Thread Tracker
-[ Process 3 ] - Thread Server
-ERROR on binding: Address already in use
-[ Process 1 ] - Thread Tracker
-[ Process 2 ] - Thread Server
-Client connect: Connection refused
-ERROR on binding: Address already in use
-[ Process 4 ] - Thread Client
-[ Process 1 ] - Server reçu: 
-[ Process 1 ] - Brain modifié: 1
-[ Process 1 ] - Brain envoie a client: 1
-[ Process 1 ] - Brain envoie a tracker: 1
-[ Process 1 ] - Tracker envoie: 1
-[ Process 1 ] - Server reçu: 
-[ Process 1 ] - Client envoie: 1
-[ Process 4 ] - Server reçu: 1
-[ Process 4 ] - Brain modifié: 14
-[ Process 4 ] - Brain envoie a client: 14
-[ Process 4 ] - Brain envoie a tracker: 14
-[ Process 4 ] - Tracker envoie: 14
-[ Process 4 ] - Client envoie: 14
-[ Process 1 ] - Tracker envoie: 1
-*/
